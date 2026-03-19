@@ -65,3 +65,37 @@ class WatchQueryResponse(BaseModel):
     retailer_urls: list[RetailerUrlResponse]
     created_at: datetime
     updated_at: datetime
+
+
+class LatestScrapeResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    product_name: str
+    price_cents: int
+    listing_url: str
+    scraped_at: datetime
+    direction: str  # "new" | "higher" | "lower" | "unchanged"
+    delta_cents: int
+    pct_change: float
+
+
+class RetailerUrlWithLatest(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    url: str
+    created_at: datetime
+    latest_result: LatestScrapeResult | None = None
+
+
+class WatchQueryDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    threshold_cents: int
+    is_active: bool
+    schedule: str
+    retailer_urls: list[RetailerUrlWithLatest]
+    created_at: datetime
+    updated_at: datetime
