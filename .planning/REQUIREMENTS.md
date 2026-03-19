@@ -32,8 +32,8 @@
 
 - [x] **ALERT-01**: System triggers an alert record when a scraped price is at or below the watch query's configured threshold
 - [x] **ALERT-02**: In-app notification badge on the nav shows unread alert count; a toast appears when new alerts arrive
-- [ ] **ALERT-03**: User can view an alert log showing all triggered alerts (query name, product name, price, retailer, timestamp)
-- [ ] **ALERT-04**: User can mark individual alerts as read and dismiss all alerts at once; badge count reflects unread only
+- [x] **ALERT-03**: User can view an alert log showing all triggered alerts (query name, product name, price, retailer, timestamp)
+- [x] **ALERT-04**: User can mark individual alerts as read and dismiss all alerts at once; badge count reflects unread only
 
 ### Dashboard
 
@@ -101,8 +101,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HIST-05 | Phase 6 | Pending |
 | ALERT-01 | Phase 4 | Complete |
 | ALERT-02 | Phase 4 | Complete |
-| ALERT-03 | Phase 4 | Pending |
-| ALERT-04 | Phase 4 | Pending |
+| ALERT-03 | Phase 4 | Complete |
+| ALERT-04 | Phase 4 | Complete |
 | DASH-01 | Phase 5 | Pending |
 | DASH-02 | Phase 5 | Pending |
 | DASH-03 | Phase 5 | Pending |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-03-19T04:10:44.026Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-19T04:11:48.551Z"
 last_activity: 2026-03-19 -- Completed 04-03-PLAN.md
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
   percent: 92
 ---
 
@@ -58,6 +58,7 @@ Progress: [█████████░] 92%
 | Phase 03 P03 | 3min | 2 tasks | 4 files |
 | Phase 04 P01 | 5min | 2 tasks | 11 files |
 | Phase 04 P03 | 3min | 1 tasks | 2 files |
+| Phase 04 P02 | 4min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ Recent decisions affecting current work:
 - [Phase 04]: SSE broadcast stub with asyncio.Queue set ready for Plan 03 streaming
 - [Phase 04]: Scheduler sync: route handlers call add_scrape_job/remove_scrape_job after DB mutation
 - [Phase 04-03]: Used manual StreamingResponse over FastAPI EventSourceResponse for explicit SSE header control
+- [Phase 04]: Separated CRUD tests into test_alerts_crud.py to coexist with SSE tests
+- [Phase 04]: Used db.refresh() for eager-loading relationships after mark_alert_read mutation
 
 ### Pending Todos
 
@@ -101,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T04:10:44.023Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-03-19T04:11:48.548Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
