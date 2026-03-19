@@ -30,12 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Repository functions can create, read, update, and delete watch queries and their associated retailer URLs against a live SQLite database
   3. SQLite is configured with WAL mode and busy_timeout on every connection (verified by querying PRAGMA values)
   4. Prices are stored as integer cents throughout the data layer (no floating-point price values anywhere)
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 01-01: Project scaffold, SQLAlchemy models, and Alembic setup
-- [ ] 01-02: Repository layer and Pydantic schemas
-- [ ] 01-03: SQLite configuration (WAL mode, busy_timeout) and data layer validation
+- [ ] 01-01-PLAN.md — Project scaffold, all six SQLAlchemy models, Alembic setup, and initial migration
+- [ ] 01-02-PLAN.md — Repository layer (watch query CRUD), Pydantic schemas, and repository tests
+- [ ] 01-03-PLAN.md — SQLite PRAGMA verification tests and migration smoke tests
 
 ### Phase 2: Scraping Engine
 **Goal**: The scraper can fetch a retailer page, extract product data, store results as historical records, and handle failures gracefully -- validated via CLI before any API exists
@@ -125,7 +125,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
