@@ -81,12 +81,12 @@ Plans:
   3. Connected browser clients receive real-time notification via SSE when a new alert fires (badge count and toast)
   4. User can view an alert log showing all triggered alerts with query name, product name, price, retailer, and timestamp
   5. User can mark individual alerts as read and dismiss all alerts; badge count reflects unread only
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 04-01: APScheduler integration with FastAPI lifespan and per-query job management
-- [ ] 04-02: Alert evaluation service and alert CRUD endpoints
-- [ ] 04-03: SSE EventManager for real-time alert push to browser clients
+- [ ] 04-01-PLAN.md — APScheduler singleton, alert evaluation service with re-breach detection, alert repository, and lifespan/route integration
+- [ ] 04-02-PLAN.md — Alert CRUD endpoints (list, mark read, dismiss all, unread count)
+- [ ] 04-03-PLAN.md — SSE stream endpoint for real-time alert push to browser clients
 
 ### Phase 5: Dashboard Frontend
 **Goal**: Users interact with the application through a browser-based dashboard showing all watch queries, their status, and drill-down details
