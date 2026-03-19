@@ -12,7 +12,7 @@ This roadmap delivers a personal price tracking application in six phases, follo
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Data Foundation** - SQLAlchemy models, Alembic migrations, repository layer, and SQLite configuration
+- [x] **Phase 1: Data Foundation** - SQLAlchemy models, Alembic migrations, repository layer, and SQLite configuration (completed 2026-03-19)
 - [ ] **Phase 2: Scraping Engine** - Playwright-based scraping with extraction, failure handling, retries, and price history storage
 - [ ] **Phase 3: API + Watch Query Management** - FastAPI REST endpoints for watch query CRUD and on-demand scrape trigger
 - [ ] **Phase 4: Scheduling + Alerts** - APScheduler background jobs and threshold-based alert system with SSE notifications
@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Repository functions can create, read, update, and delete watch queries and their associated retailer URLs against a live SQLite database
   3. SQLite is configured with WAL mode and busy_timeout on every connection (verified by querying PRAGMA values)
   4. Prices are stored as integer cents throughout the data layer (no floating-point price values anywhere)
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 01-01-PLAN.md — Project scaffold, all six SQLAlchemy models, Alembic setup, and initial migration
@@ -129,7 +129,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 2/3 | In Progress|  |
+| 1. Data Foundation | 3/3 | Complete   | 2026-03-19 |
 | 2. Scraping Engine | 0/3 | Not started | - |
 | 3. API + Watch Query Management | 0/3 | Not started | - |
 | 4. Scheduling + Alerts | 0/3 | Not started | - |
