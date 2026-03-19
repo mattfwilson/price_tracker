@@ -85,17 +85,20 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| QUERY-01 | Phase 1 | Pending |
-| QUERY-02 | Phase 1 | Pending |
-| QUERY-03 | Phase 1 | Pending |
-| QUERY-04 | Phase 1 | Pending |
-| QUERY-05 | Phase 1 | Pending |
+| QUERY-01 | Phase 3 | Pending |
+| QUERY-02 | Phase 3 | Pending |
+| QUERY-03 | Phase 3 | Pending |
+| QUERY-04 | Phase 3 | Pending |
+| QUERY-05 | Phase 3 | Pending |
 | SCRAPE-01 | Phase 2 | Pending |
+| SCRAPE-02 | Phase 4 | Pending |
+| SCRAPE-03 | Phase 3 | Pending |
 | SCRAPE-04 | Phase 2 | Pending |
 | HIST-01 | Phase 2 | Pending |
 | HIST-02 | Phase 2 | Pending |
-| SCRAPE-02 | Phase 3 | Pending |
-| SCRAPE-03 | Phase 3 | Pending |
+| HIST-03 | Phase 6 | Pending |
+| HIST-04 | Phase 6 | Pending |
+| HIST-05 | Phase 6 | Pending |
 | ALERT-01 | Phase 4 | Pending |
 | ALERT-02 | Phase 4 | Pending |
 | ALERT-03 | Phase 4 | Pending |
@@ -104,17 +107,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-02 | Phase 5 | Pending |
 | DASH-03 | Phase 5 | Pending |
 | DASH-04 | Phase 5 | Pending |
-| HIST-03 | Phase 5 | Pending |
-| HIST-04 | Phase 5 | Pending |
-| HIST-05 | Phase 5 | Pending |
 | UI-01 | Phase 5 | Pending |
-| UI-02 | Phase 5 | Pending |
+| UI-02 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 24 total
 - Mapped to phases: 24
-- Unmapped: 0 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after initial definition*
+*Last updated: 2026-03-18 after roadmap creation*
