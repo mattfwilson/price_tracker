@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-19T03:14:02.442Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-19T03:18:37.879Z"
 last_activity: 2026-03-18 -- Completed 03-01-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 78
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 3 of 6 (API & Watch Query Management)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In Progress
-Last activity: 2026-03-18 -- Completed 03-01-PLAN.md
+Last activity: 2026-03-18 -- Completed 03-02-PLAN.md
 
-Progress: [████████░░] 78%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [████████░░] 78%
 | Phase 02 P02 | 3min | 2 tasks | 5 files |
 | Phase 02 P03 | 2min | 2 tasks | 4 files |
 | Phase 03 P01 | 2min | 2 tasks | 7 files |
+| Phase 03 P02 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Added app.scrapers import in CLI script to trigger extractor auto-registration
 - [Phase 03]: Thin route handlers -- no session.commit() in endpoints; get_db dependency handles commit/rollback
 - [Phase 03]: Test DB override mirrors production get_db pattern (commit on success, rollback on error)
+- [Phase 03-02]: Diff-based URL replacement in PATCH to preserve scrape history for retained URLs
+- [Phase 03-02]: Re-fetch after flush + expire cached state to resolve SQLAlchemy async staleness with server-side onupdate
 
 ### Pending Todos
 
@@ -88,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T03:14:02.438Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-19T03:18:37.876Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

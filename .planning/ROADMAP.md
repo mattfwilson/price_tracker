@@ -64,7 +64,7 @@ Plans:
   3. User can delete a watch query and pause/resume it (paused queries retain configuration)
   4. User can trigger an on-demand scrape for any watch query via API and the scrape executes using the Phase 2 engine
   5. All endpoints return proper Pydantic-validated responses with appropriate HTTP status codes
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 03-01-PLAN.md — FastAPI app skeleton with CORS, router mounting, POST create endpoint, and test infrastructure (Wave 0)
@@ -131,7 +131,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 3/3 | Complete   | 2026-03-19 |
 | 2. Scraping Engine | 3/3 | Complete   | 2026-03-19 |
-| 3. API + Watch Query Management | 0/3 | Not started | - |
+| 3. API + Watch Query Management | 2/3 | In Progress|  |
 | 4. Scheduling + Alerts | 0/3 | Not started | - |
 | 5. Dashboard Frontend | 0/4 | Not started | - |
 | 6. Price History Visualization + Polish | 0/3 | Not started | - |

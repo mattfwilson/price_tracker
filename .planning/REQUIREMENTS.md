@@ -8,9 +8,9 @@
 ### Watch Query Management
 
 - [x] **QUERY-01**: User can create a watch query with a search term, one or more retailer URLs, and a price threshold
-- [ ] **QUERY-02**: User can edit a watch query's name, price threshold, and retailer URLs
-- [ ] **QUERY-03**: User can delete a watch query
-- [ ] **QUERY-04**: User can pause and resume a watch query (paused queries skip scheduled scrapes but retain their config)
+- [x] **QUERY-02**: User can edit a watch query's name, price threshold, and retailer URLs
+- [x] **QUERY-03**: User can delete a watch query
+- [x] **QUERY-04**: User can pause and resume a watch query (paused queries skip scheduled scrapes but retain their config)
 - [x] **QUERY-05**: System identifies and filters duplicate retailer URLs within a watch query at creation and edit time
 
 ### Scraping
@@ -86,9 +86,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | QUERY-01 | Phase 3 | Complete |
-| QUERY-02 | Phase 3 | Pending |
-| QUERY-03 | Phase 3 | Pending |
-| QUERY-04 | Phase 3 | Pending |
+| QUERY-02 | Phase 3 | Complete |
+| QUERY-03 | Phase 3 | Complete |
+| QUERY-04 | Phase 3 | Complete |
 | QUERY-05 | Phase 3 | Complete |
 | SCRAPE-01 | Phase 2 | Complete |
 | SCRAPE-02 | Phase 4 | Pending |
