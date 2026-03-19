@@ -15,6 +15,7 @@ from app.models.scrape_job import ScrapeJob
 from app.repositories.scrape_result import (
     create_scrape_job,
     create_scrape_result,
+    get_latest_scrape_result,
     update_scrape_job,
 )
 from app.scrapers.base import FailureType, ScrapeData, ScrapeError
@@ -106,3 +107,38 @@ async def run_scrape_job(
     await update_scrape_job(session, job, status=status, error_message=error_msg)
 
     return job
+
+
+async def calculate_price_delta(
+    session: AsyncSession,
+    retailer_url_id: int,
+    current_price_cents: int,
+) -> dict:
+    """Calculate price change vs most recent previous scrape for this retailer URL.
+
+    Returns dict with keys:
+    - direction: "new" | "higher" | "lower" | "unchanged"
+    - delta_cents: int (current - previous, 0 for new)
+    - pct_change: float (percentage change, rounded to 2 decimals, 0.0 for new or zero previous)
+    """
+    previous = await get_latest_scrape_result(session, retailer_url_id)
+
+    if previous is None:
+        return {"direction": "new", "delta_cents": 0, "pct_change": 0.0}
+
+    prev_price = previous.price_cents
+    delta = current_price_cents - prev_price
+
+    if prev_price == 0:
+        pct = 0.0
+    else:
+        pct = round((delta / prev_price) * 100, 2)
+
+    if delta > 0:
+        direction = "higher"
+    elif delta < 0:
+        direction = "lower"
+    else:
+        direction = "unchanged"
+
+    return {"direction": direction, "delta_cents": delta, "pct_change": pct}
