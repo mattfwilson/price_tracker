@@ -47,12 +47,12 @@ Plans:
   3. Price delta (higher/lower/unchanged) and percentage change are calculated correctly against the previous scrape result for the same listing
   4. A failed scrape retries 2-3 times with exponential backoff and stores an error status with failure reason
   5. A CLI test script can execute a scrape end-to-end without needing the API or frontend
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 02-01: Playwright browser manager and base extractor with Amazon implementation
-- [ ] 02-02: Scraping service, retry logic, and error handling
-- [ ] 02-03: Price history storage, delta calculation, and CLI validation script
+- [ ] 02-01-PLAN.md — Base extractor contracts, registry, browser manager, and 5 retailer extractors with mock HTML tests
+- [ ] 02-02-PLAN.md — Scrape service orchestration, retry logic with tenacity, ScrapeResult/ScrapeJob repository
+- [ ] 02-03-PLAN.md — Price delta calculation and CLI validation script (print-only, no DB)
 
 ### Phase 3: API + Watch Query Management
 **Goal**: Users can manage watch queries through REST endpoints and trigger on-demand scrapes, with all CRUD operations validated
