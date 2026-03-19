@@ -64,12 +64,12 @@ Plans:
   3. User can delete a watch query and pause/resume it (paused queries retain configuration)
   4. User can trigger an on-demand scrape for any watch query via API and the scrape executes using the Phase 2 engine
   5. All endpoints return proper Pydantic-validated responses with appropriate HTTP status codes
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 03-01: FastAPI app skeleton with lifespan and CORS configuration
-- [ ] 03-02: Watch query CRUD endpoints with duplicate URL filtering
-- [ ] 03-03: On-demand scrape endpoint and scrape results/history endpoints
+- [ ] 03-01-PLAN.md — FastAPI app skeleton with CORS, router mounting, POST create endpoint, and test infrastructure (Wave 0)
+- [ ] 03-02-PLAN.md — Watch query CRUD endpoints (GET list, GET detail with embedded results, PATCH with URL dedup, DELETE, pause/resume)
+- [ ] 03-03-PLAN.md — On-demand scrape trigger endpoint and price history endpoint with computed deltas
 
 ### Phase 4: Scheduling + Alerts
 **Goal**: Scrapes run automatically on user-configured schedules and alerts fire when prices drop to or below threshold -- completing the end-to-end value loop without manual intervention
