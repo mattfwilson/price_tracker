@@ -58,11 +58,11 @@ Declared values (must be multiples of 4):
 | md | 16px | Default element spacing, card internal padding, form field gaps |
 | lg | 24px | Section padding, card grid gap |
 | xl | 32px | Page horizontal padding (desktop) |
-| 2xl | 48px | Header height, major section separation |
+| 2xl | 48px | Header height, major section separation, minimum touch target size |
 | 3xl | 64px | Page top/bottom margin |
 
 Exceptions:
-- Touch targets on mobile: minimum 44px hit area for three-dot menu, bell icon, and card action buttons
+- Touch targets on mobile: minimum 48px hit area for three-dot menu, bell icon, and card action buttons
 - Card grid gap: 24px on desktop, 16px on mobile
 
 ---
@@ -72,18 +72,18 @@ Exceptions:
 | Role | Size | Weight | Line Height | Font |
 |------|------|--------|-------------|------|
 | Body | 14px | 400 (regular) | 1.5 | DM Sans |
-| Label | 13px | 500 (medium) | 1.4 | DM Sans |
-| Heading | 20px | 600 (semibold) | 1.2 | Outfit |
+| Small | 12px | 400 (regular) | 1.4 | DM Sans |
+| Heading | 20px | 700 (bold) | 1.2 | Outfit |
 | Display | 28px | 700 (bold) | 1.1 | Outfit |
 
 Additional type styles for specific elements:
 
 | Element | Size | Weight | Font |
 |---------|------|--------|------|
-| Card query name | 16px | 600 | Outfit |
-| Card price (large) | 24px | 700 | Outfit |
+| Card query name | 20px | 700 | Outfit |
+| Card price (large) | 28px | 700 | Outfit |
 | Card metadata (URL count, timestamp) | 12px | 400 | DM Sans |
-| Badge text | 11px | 600 | DM Sans |
+| Badge text | 12px | 700 | DM Sans |
 | Toast body | 14px | 400 | DM Sans |
 | Alert log table cell | 14px | 400 | DM Sans |
 
@@ -155,14 +155,14 @@ Uses shadcn CSS variables in zinc palette. These map to the default shadcn theme
 
 - Title: "Delete {query name}?"
 - Description: "This will permanently remove this watch query, all its retailer URLs, and scrape history. This cannot be undone."
-- Actions: "Cancel" (outline) + "Delete" (destructive variant)
+- Actions: "Keep Query" (outline) + "Delete" (destructive variant)
 
 ### Bell Dropdown (Popover)
 
 - Trigger: bell icon with overlaid unread count badge (red circle, white text, min-width 20px)
 - Badge hidden when count is 0
 - Panel: max-height 400px, scrollable
-- Each alert row: unread dot (blue, 8px), query name (semibold), price + retailer (body), relative timestamp (muted, right-aligned)
+- Each alert row: unread dot (blue, 8px), query name (bold), price + retailer (body), relative timestamp (muted, right-aligned)
 - Clicking alert row: marks as read (optimistic UI — remove dot immediately, PATCH in background)
 - Footer: "Dismiss All" button (ghost variant) + "View All" link (navigates to /alerts)
 
@@ -199,6 +199,8 @@ Uses shadcn CSS variables in zinc palette. These map to the default shadcn theme
 | Error state (scrape failure on card) | Status dot red + "Last scrape failed" as status label |
 | Delete confirmation title | "Delete {query name}?" |
 | Delete confirmation body | "This will permanently remove this watch query, all its retailer URLs, and scrape history. This cannot be undone." |
+| Delete confirmation cancel | "Keep Query" |
+| Delete confirmation confirm | "Delete" |
 | Pause action label | "Pause" / "Resume" (dynamic based on current state) |
 | Scrape Now feedback | Toast: "Scrape started for {query name}" |
 | Threshold badge | "Below threshold" |
