@@ -43,10 +43,30 @@ async def trigger_scrape(query_id: int, db: AsyncSession = Depends(get_db)):
     # Load job's scrape results with eager loading
     await db.refresh(job, attribute_names=["scrape_results"])
 
-    # Build response with price deltas for each result
+    # Build response with price deltas for each result.
+    # Since the new results are already flushed to DB, get_latest_scrape_result
+    # would find the result we just created. Instead, query for the second-latest
+    # result (the one before this scrape) to compute the delta correctly.
     results = []
     for sr in job.scrape_results:
-        delta = await calculate_price_delta(db, sr.retailer_url_id, sr.price_cents)
+        # Find the previous result (before the one just created) for this retailer_url
+        prev_stmt = (
+            select(ScrapeResult)
+            .where(ScrapeResult.retailer_url_id == sr.retailer_url_id)
+            .where(ScrapeResult.id != sr.id)
+            .order_by(ScrapeResult.created_at.desc(), ScrapeResult.id.desc())
+            .limit(1)
+        )
+        prev_result = await db.execute(prev_stmt)
+        prev_record = prev_result.scalar_one_or_none()
+        if prev_record is not None:
+            delta = await calculate_price_delta(
+                db, sr.retailer_url_id, sr.price_cents,
+                previous_price_cents=prev_record.price_cents,
+            )
+        else:
+            # First-ever scrape for this retailer URL
+            delta = {"direction": "new", "delta_cents": 0, "pct_change": 0.0}
         results.append(
             ScrapeResultResponse(
                 product_name=sr.product_name,
@@ -89,9 +109,7 @@ async def get_history(retailer_url_id: int, db: AsyncSession = Depends(get_db)):
     # Records are newest-first. For each record, pass the previous (older) record's
     # price_cents via the previous_price_cents parameter so calculate_price_delta()
     # compares consecutive pairs without a DB lookup.
-    # The oldest record has no previous, so calculate_price_delta() is called with
-    # previous_price_cents=None which triggers the DB lookup path -- since there is
-    # no earlier ScrapeResult, it returns direction="new".
+    # The oldest record has no previous record in the series, so it is marked "new".
     history = []
     for i, rec in enumerate(records):
         if i < len(records) - 1:
@@ -104,14 +122,8 @@ async def get_history(retailer_url_id: int, db: AsyncSession = Depends(get_db)):
                 previous_price_cents=prev_price,
             )
         else:
-            # Oldest record -- no previous; let calculate_price_delta() do DB lookup
-            # which will find no prior result and return direction="new"
-            delta = await calculate_price_delta(
-                db,
-                retailer_url_id,
-                rec.price_cents,
-                previous_price_cents=None,
-            )
+            # Oldest record -- no previous in the series; this is the first-ever scrape
+            delta = {"direction": "new", "delta_cents": 0, "pct_change": 0.0}
 
         history.append(
             HistoryRecordResponse(
