@@ -113,20 +113,26 @@ async def calculate_price_delta(
     session: AsyncSession,
     retailer_url_id: int,
     current_price_cents: int,
+    previous_price_cents: int | None = None,
 ) -> dict:
     """Calculate price change vs most recent previous scrape for this retailer URL.
+
+    When previous_price_cents is provided, uses that value directly instead of
+    querying the database. This allows the history endpoint to compute deltas
+    for consecutive pairs without extra DB lookups.
 
     Returns dict with keys:
     - direction: "new" | "higher" | "lower" | "unchanged"
     - delta_cents: int (current - previous, 0 for new)
     - pct_change: float (percentage change, rounded to 2 decimals, 0.0 for new or zero previous)
     """
-    previous = await get_latest_scrape_result(session, retailer_url_id)
-
-    if previous is None:
-        return {"direction": "new", "delta_cents": 0, "pct_change": 0.0}
-
-    prev_price = previous.price_cents
+    if previous_price_cents is not None:
+        prev_price = previous_price_cents
+    else:
+        previous = await get_latest_scrape_result(session, retailer_url_id)
+        if previous is None:
+            return {"direction": "new", "delta_cents": 0, "pct_change": 0.0}
+        prev_price = previous.price_cents
     delta = current_price_cents - prev_price
 
     if prev_price == 0:
