@@ -116,7 +116,8 @@ async def update_query(
                 db.add(RetailerUrl(url=url_str, watch_query_id=query.id))
 
         await db.flush()
-        # Reload to get fresh retailer_urls
+        # Expire cached state so selectinload re-queries the DB
+        db.expire(query)
         query = await get_watch_query(db, query_id)
 
     return query

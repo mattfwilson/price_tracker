@@ -63,7 +63,8 @@ async def update_watch_query(
             setattr(query, key, value)
 
     await db.flush()
-    return query
+    # Re-fetch to pick up server-side onupdate (updated_at) and eager-load relationships
+    return await get_watch_query(db, query_id)
 
 
 async def delete_watch_query(db: AsyncSession, query_id: int) -> bool:
