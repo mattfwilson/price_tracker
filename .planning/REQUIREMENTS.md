@@ -17,7 +17,7 @@
 
 - [x] **SCRAPE-01**: System scrapes retailer pages using Playwright headless browser and extracts product name, current price, retailer name, and direct listing URL per page
 - [ ] **SCRAPE-02**: Scraping runs automatically on a per-query configurable schedule (every 6h, 12h, daily, or weekly) as a background job — even when the user is not using the app
-- [ ] **SCRAPE-03**: User can trigger an on-demand scrape for any watch query from the UI
+- [x] **SCRAPE-03**: User can trigger an on-demand scrape for any watch query from the UI
 - [x] **SCRAPE-04**: Scraping failures are retried (2–3x with exponential backoff) and error status with failure reason is surfaced in the UI
 
 ### Price History
@@ -92,7 +92,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUERY-05 | Phase 3 | Complete |
 | SCRAPE-01 | Phase 2 | Complete |
 | SCRAPE-02 | Phase 4 | Pending |
-| SCRAPE-03 | Phase 3 | Pending |
+| SCRAPE-03 | Phase 3 | Complete |
 | SCRAPE-04 | Phase 2 | Complete |
 | HIST-01 | Phase 2 | Complete |
 | HIST-02 | Phase 2 | Complete |
