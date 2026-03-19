@@ -36,6 +36,12 @@ async def create(payload: WatchQueryCreate, db: AsyncSession = Depends(get_db)):
         threshold_cents=payload.threshold_cents,
         urls=unique_urls,
     )
+
+    # Register scheduler job for the new active query
+    from app.services.scheduler import add_scrape_job
+    if query.is_active:
+        add_scrape_job(query.id, query.schedule)
+
     return query
 
 
@@ -99,6 +105,16 @@ async def update_query(
     if query is None:
         raise HTTPException(status_code=404, detail="Watch query not found")
 
+    # Sync scheduler on pause/resume/schedule change
+    from app.services.scheduler import add_scrape_job, remove_scrape_job
+    if "is_active" in fields:
+        if fields["is_active"]:
+            add_scrape_job(query.id, query.schedule)
+        else:
+            remove_scrape_job(query.id)
+    if "schedule" in fields and query.is_active:
+        add_scrape_job(query.id, query.schedule)
+
     # Handle URL replacement if urls provided (diff-based to preserve history)
     if payload.urls is not None:
         unique_urls = list(dict.fromkeys(payload.urls))
@@ -126,6 +142,9 @@ async def update_query(
 @router.delete("/{query_id}", status_code=204)
 async def delete_query(query_id: int, db: AsyncSession = Depends(get_db)):
     """Delete a watch query."""
+    from app.services.scheduler import remove_scrape_job
+    remove_scrape_job(query_id)
+
     deleted = await delete_watch_query(db, query_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Watch query not found")

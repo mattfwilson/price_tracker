@@ -40,6 +40,10 @@ async def trigger_scrape(query_id: int, db: AsyncSession = Depends(get_db)):
     bm = await get_browser_manager()
     job = await run_scrape_job(db, query_id, bm)
 
+    # Evaluate alerts for the scrape results
+    from app.services.alert_service import evaluate_alerts_for_job
+    await evaluate_alerts_for_job(db, query_id, job.id)
+
     # Load job's scrape results with eager loading
     await db.refresh(job, attribute_names=["scrape_results"])
 

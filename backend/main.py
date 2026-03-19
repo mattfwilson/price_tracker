@@ -18,7 +18,17 @@ async def lifespan(app: FastAPI):
         os.path.join(os.path.dirname(__file__), "alembic.ini")
     )
     command.upgrade(alembic_cfg, "head")
+
+    # Start scheduler and register jobs from DB
+    from app.services.scheduler import scheduler, register_jobs_from_db
+    await register_jobs_from_db()
+    scheduler.start()
+
     yield
+
+    # Shutdown scheduler
+    scheduler.shutdown(wait=False)
+
     # Cleanup browser manager on shutdown
     from app.api.scrapes import _browser_manager
 
@@ -38,6 +48,12 @@ app.add_middleware(
 
 app.include_router(watch_queries_router)
 app.include_router(scrapes_router)
+
+try:
+    from app.api.alerts import router as alerts_router
+    app.include_router(alerts_router)
+except ImportError:
+    pass
 
 
 @app.get("/health")
