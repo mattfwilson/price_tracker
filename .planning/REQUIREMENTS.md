@@ -23,7 +23,7 @@
 ### Price History
 
 - [x] **HIST-01**: Every scrape result is stored as an immutable historical record: product name, retailer name, price (in integer cents), listing URL, and timestamp
-- [ ] **HIST-02**: Price delta (↑ higher / ↓ lower / — unchanged) and percentage change are calculated vs. the previous scrape result for each listing
+- [x] **HIST-02**: Price delta (↑ higher / ↓ lower / — unchanged) and percentage change are calculated vs. the previous scrape result for each listing
 - [ ] **HIST-03**: Price history for a listing is displayed as a line chart with a horizontal dashed threshold line overlay
 - [ ] **HIST-04**: Price history for a listing is displayed as a sortable table with date, price, and delta columns (default: newest first)
 - [ ] **HIST-05**: User can filter the price history chart and table by time range (7d, 30d, 90d, all)
@@ -95,7 +95,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SCRAPE-03 | Phase 3 | Pending |
 | SCRAPE-04 | Phase 2 | Complete |
 | HIST-01 | Phase 2 | Complete |
-| HIST-02 | Phase 2 | Pending |
+| HIST-02 | Phase 2 | Complete |
 | HIST-03 | Phase 6 | Pending |
 | HIST-04 | Phase 6 | Pending |
 | HIST-05 | Phase 6 | Pending |

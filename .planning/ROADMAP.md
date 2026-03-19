@@ -13,7 +13,7 @@ This roadmap delivers a personal price tracking application in six phases, follo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Data Foundation** - SQLAlchemy models, Alembic migrations, repository layer, and SQLite configuration (completed 2026-03-19)
-- [ ] **Phase 2: Scraping Engine** - Playwright-based scraping with extraction, failure handling, retries, and price history storage
+- [x] **Phase 2: Scraping Engine** - Playwright-based scraping with extraction, failure handling, retries, and price history storage (completed 2026-03-19)
 - [ ] **Phase 3: API + Watch Query Management** - FastAPI REST endpoints for watch query CRUD and on-demand scrape trigger
 - [ ] **Phase 4: Scheduling + Alerts** - APScheduler background jobs and threshold-based alert system with SSE notifications
 - [ ] **Phase 5: Dashboard Frontend** - React dashboard with query cards, drill-down views, and visual indicators
@@ -47,7 +47,7 @@ Plans:
   3. Price delta (higher/lower/unchanged) and percentage change are calculated correctly against the previous scrape result for the same listing
   4. A failed scrape retries 2-3 times with exponential backoff and stores an error status with failure reason
   5. A CLI test script can execute a scrape end-to-end without needing the API or frontend
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 02-01-PLAN.md — Base extractor contracts, registry, browser manager, and 5 retailer extractors with mock HTML tests
@@ -130,7 +130,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 3/3 | Complete   | 2026-03-19 |
-| 2. Scraping Engine | 0/3 | Not started | - |
+| 2. Scraping Engine | 3/3 | Complete   | 2026-03-19 |
 | 3. API + Watch Query Management | 0/3 | Not started | - |
 | 4. Scheduling + Alerts | 0/3 | Not started | - |
 | 5. Dashboard Frontend | 0/4 | Not started | - |
