@@ -13,11 +13,14 @@ from app.services.scheduler import (
 )
 
 
-@pytest.fixture
-def running_scheduler():
+@pytest_asyncio.fixture
+async def running_scheduler():
     """Start the scheduler for tests and shut it down after."""
+    # Remove any leftover jobs from previous tests
     scheduler.start(paused=True)
     yield scheduler
+    # Remove all jobs before shutdown to avoid leaking state
+    scheduler.remove_all_jobs()
     scheduler.shutdown(wait=False)
 
 
@@ -33,18 +36,21 @@ class TestScheduleMap:
 
 
 class TestAddRemoveJobs:
-    def test_add_scrape_job(self, running_scheduler):
+    @pytest.mark.asyncio
+    async def test_add_scrape_job(self, running_scheduler):
         add_scrape_job(1, "daily")
         job = running_scheduler.get_job("scrape_query_1")
         assert job is not None
 
-    def test_remove_scrape_job(self, running_scheduler):
+    @pytest.mark.asyncio
+    async def test_remove_scrape_job(self, running_scheduler):
         add_scrape_job(1, "daily")
         remove_scrape_job(1)
         job = running_scheduler.get_job("scrape_query_1")
         assert job is None
 
-    def test_add_replaces_existing(self, running_scheduler):
+    @pytest.mark.asyncio
+    async def test_add_replaces_existing(self, running_scheduler):
         add_scrape_job(1, "daily")
         add_scrape_job(1, "every_6h")
         # Should still be exactly one job with that id
@@ -55,7 +61,8 @@ class TestAddRemoveJobs:
         scrape_jobs = [j for j in all_jobs if j.id == "scrape_query_1"]
         assert len(scrape_jobs) == 1
 
-    def test_remove_nonexistent_no_error(self, running_scheduler):
+    @pytest.mark.asyncio
+    async def test_remove_nonexistent_no_error(self, running_scheduler):
         # Should not raise
         remove_scrape_job(999)
 
@@ -71,8 +78,7 @@ class TestRegisterJobsFromDb:
         db_session.add_all([wq1, wq2, wq3])
         await db_session.flush()
 
-        # Monkeypatch async_session_factory to return our test session
-        from unittest.mock import AsyncMock, MagicMock
+        # Monkeypatch async_session_factory on the database module (where it's imported from)
         from contextlib import asynccontextmanager
 
         @asynccontextmanager
@@ -80,7 +86,7 @@ class TestRegisterJobsFromDb:
             yield db_session
 
         monkeypatch.setattr(
-            "app.services.scheduler.async_session_factory",
+            "app.core.database.async_session_factory",
             mock_session_factory,
         )
 
