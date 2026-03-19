@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Repository functions can create, read, update, and delete watch queries and their associated retailer URLs against a live SQLite database
   3. SQLite is configured with WAL mode and busy_timeout on every connection (verified by querying PRAGMA values)
   4. Prices are stored as integer cents throughout the data layer (no floating-point price values anywhere)
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 01-01-PLAN.md — Project scaffold, all six SQLAlchemy models, Alembic setup, and initial migration
@@ -129,7 +129,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 0/3 | Not started | - |
+| 1. Data Foundation | 2/3 | In Progress|  |
 | 2. Scraping Engine | 0/3 | Not started | - |
 | 3. API + Watch Query Management | 0/3 | Not started | - |
 | 4. Scheduling + Alerts | 0/3 | Not started | - |
