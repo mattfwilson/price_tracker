@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -58,3 +59,30 @@ class BaseExtractor(ABC):
         """Common price parsing: '$1,299.99' -> 129999"""
         cleaned = price_str.replace("$", "").replace(",", "").strip()
         return int(round(float(cleaned) * 100))
+
+    async def _try_json_ld(self, page: Page) -> ScrapeData | None:
+        """Try extracting from JSON-LD structured data (most reliable)."""
+        scripts = await page.query_selector_all('script[type="application/ld+json"]')
+        for script in scripts:
+            text = await script.inner_text()
+            try:
+                data = json.loads(text)
+                # Handle both single object and array
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    if item.get("@type") == "Product":
+                        offers = item.get("offers", {})
+                        if isinstance(offers, list):
+                            offers = offers[0]
+                        price = offers.get("price")
+                        name = item.get("name")
+                        if price and name:
+                            return ScrapeData(
+                                product_name=name,
+                                price_cents=int(round(float(price) * 100)),
+                                listing_url=str(page.url),
+                                retailer_name=self.retailer_name,
+                            )
+            except (json.JSONDecodeError, KeyError, ValueError):
+                continue
+        return None
