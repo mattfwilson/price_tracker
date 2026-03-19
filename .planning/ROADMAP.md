@@ -81,7 +81,7 @@ Plans:
   3. Connected browser clients receive real-time notification via SSE when a new alert fires (badge count and toast)
   4. User can view an alert log showing all triggered alerts with query name, product name, price, retailer, and timestamp
   5. User can mark individual alerts as read and dismiss all alerts; badge count reflects unread only
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 04-01-PLAN.md — APScheduler singleton, alert evaluation service with re-breach detection, alert repository, and lifespan/route integration
@@ -132,6 +132,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Data Foundation | 3/3 | Complete   | 2026-03-19 |
 | 2. Scraping Engine | 3/3 | Complete   | 2026-03-19 |
 | 3. API + Watch Query Management | 2/3 | In Progress|  |
-| 4. Scheduling + Alerts | 0/3 | Not started | - |
+| 4. Scheduling + Alerts | 2/3 | In Progress|  |
 | 5. Dashboard Frontend | 0/4 | Not started | - |
 | 6. Price History Visualization + Polish | 0/3 | Not started | - |
