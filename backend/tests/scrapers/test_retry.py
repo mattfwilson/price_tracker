@@ -137,9 +137,10 @@ async def test_backoff_timing():
                 with pytest.raises((ScrapeError, RetryError)):
                     await scrape_single_url(browser, "https://amazon.com/dp/test")
 
-    # Filter out the random human-delay sleeps (0.5 to 2.0) from the tenacity backoff sleeps
-    backoff_sleeps = [s for s in sleep_calls if s > 1.5]
+    # Tenacity backoff sleeps are exactly 2.0, 4.0, 8.0
+    # Human-delay sleeps are random in [0.5, 2.0) -- filter by checking exact known values
+    backoff_sleeps = [s for s in sleep_calls if s in (2.0, 4.0, 8.0)]
     assert len(backoff_sleeps) == 3
-    assert backoff_sleeps[0] == pytest.approx(2.0, abs=0.5)
-    assert backoff_sleeps[1] == pytest.approx(4.0, abs=0.5)
-    assert backoff_sleeps[2] == pytest.approx(8.0, abs=0.5)
+    assert backoff_sleeps[0] == 2.0
+    assert backoff_sleeps[1] == 4.0
+    assert backoff_sleeps[2] == 8.0
