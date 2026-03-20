@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, Pause, Play, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, MoreHorizontal, Pencil, Pause, Play, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,6 +13,7 @@ interface CardMenuProps {
   queryId: number;
   queryName: string;
   isActive: boolean;
+  isScraping: boolean;
   onEdit: () => void;
   onScrapeNow: () => void;
   onDelete: () => void;
@@ -22,12 +23,27 @@ export function CardMenu({
   queryId,
   queryName,
   isActive,
+  isScraping,
   onEdit,
   onScrapeNow,
   onDelete,
 }: CardMenuProps) {
   const pauseMutation = usePauseQuery();
   const resumeMutation = useResumeQuery();
+
+  if (isScraping) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Scraping in progress"
+      >
+        <Loader2 className="h-4 w-4 animate-spin" />
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu>
@@ -41,7 +57,7 @@ export function CardMenu({
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" onPointerDown={(e) => e.stopPropagation()}>
         <DropdownMenuItem onClick={onEdit}>
           <Pencil className="h-4 w-4" />
           Edit

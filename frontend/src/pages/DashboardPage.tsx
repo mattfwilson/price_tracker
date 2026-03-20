@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { useWatchQueries, useWatchQueryDetail } from "@/hooks/use-watch-queries";
 import { QueryCardGrid } from "@/components/dashboard/QueryCardGrid";
-import { QuerySheet } from "@/components/query/QuerySheet";
 import { QueryFormDialog } from "@/components/query/QueryFormDialog";
 import { DeleteQueryDialog } from "@/components/query/DeleteQueryDialog";
 
 export function DashboardPage() {
   const { data: queries, isLoading, isError } = useWatchQueries();
 
-  const [selectedQueryId, setSelectedQueryId] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editQueryId, setEditQueryId] = useState<number | null>(null);
   const [deleteQuery, setDeleteQuery] = useState<{ id: number; name: string } | null>(null);
@@ -23,20 +21,12 @@ export function DashboardPage() {
         queries={queries}
         isLoading={isLoading}
         isError={isError}
-        onCardClick={(id) => setSelectedQueryId(id)}
+        onCardClick={(id) => setEditQueryId(id)}
         onNewQuery={() => setShowCreateDialog(true)}
         onEdit={(id) => setEditQueryId(id)}
         onDelete={(id) => {
           const query = queries?.find((q) => q.id === id);
           setDeleteQuery({ id, name: query?.name ?? "" });
-        }}
-      />
-
-      <QuerySheet
-        open={selectedQueryId !== null}
-        queryId={selectedQueryId}
-        onOpenChange={(open) => {
-          if (!open) setSelectedQueryId(null);
         }}
       />
 

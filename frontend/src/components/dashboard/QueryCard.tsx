@@ -69,7 +69,7 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete }: QueryCardPro
   function deltaColor(direction: string): string {
     switch (direction) {
       case "lower":
-        return "text-emerald-600";
+        return "text-emerald-400";
       case "higher":
         return "text-red-500";
       default:
@@ -94,14 +94,22 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete }: QueryCardPro
           <Badge variant="secondary" className="text-xs">
             {query.retailer_urls.length} url{query.retailer_urls.length !== 1 ? "s" : ""}
           </Badge>
-          <CardMenu
-            queryId={query.id}
-            queryName={query.name}
-            isActive={query.is_active}
-            onEdit={() => onEdit(query.id)}
-            onScrapeNow={handleScrapeNow}
-            onDelete={() => onDelete(query.id)}
-          />
+          {/* Wrapper intercepts all pointer/click events so none reach the card */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
+            <CardMenu
+              queryId={query.id}
+              queryName={query.name}
+              isActive={query.is_active}
+              isScraping={isScrapingLocal}
+              onEdit={() => onEdit(query.id)}
+              onScrapeNow={handleScrapeNow}
+              onDelete={() => onDelete(query.id)}
+            />
+          </div>
         </div>
       </div>
 
@@ -128,7 +136,7 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete }: QueryCardPro
               </span>
             </div>
             {breached && (
-              <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
                 Below threshold
               </Badge>
             )}

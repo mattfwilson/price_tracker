@@ -10,7 +10,7 @@ const statusConfig: Record<
   ok: { color: "bg-emerald-500", label: "OK" },
   error: { color: "bg-red-500", label: "Error" },
   running: { color: "bg-amber-500", label: "Running", pulse: true },
-  paused: { color: "bg-zinc-400", label: "Paused" },
+  paused: { color: "bg-zinc-500", label: "Paused" },
 };
 
 interface StatusDotProps {

@@ -27,3 +27,6 @@ frontend/.vite/
 
 # Chrome profile (contains session cookies — do not commit)
 ~/.config/price_scraper/
+
+# Claude Code local config
+.claude/

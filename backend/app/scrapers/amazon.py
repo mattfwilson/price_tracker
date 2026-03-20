@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import re
+from urllib.parse import urlparse
+
 from patchright.async_api import Page
 
 from app.scrapers.base import BaseExtractor, FailureType, ScrapeData, ScrapeError
 from app.scrapers.registry import register_extractor
+
+_ASIN_RE = re.compile(r"/dp/([A-Z0-9]{10})")
+
+
+def _clean_amazon_url(url: str) -> str:
+    """Return a clean /dp/{ASIN} URL, stripping tracking params (dib, crid, etc.)
+    that cause Amazon to serve comparison-shopping pages with third-party offers."""
+    parsed = urlparse(url)
+    m = _ASIN_RE.search(parsed.path)
+    if m:
+        return f"https://www.amazon.com/dp/{m.group(1)}"
+    return url  # non-ASIN URL, leave as-is
 
 
 class AmazonExtractor(BaseExtractor):
@@ -20,6 +35,10 @@ class AmazonExtractor(BaseExtractor):
         return ["amazon.com", "www.amazon.com"]
 
     async def extract(self, page: Page, url: str) -> ScrapeData:
+        # If the current URL still has tracking params, navigate to the clean ASIN URL
+        clean = _clean_amazon_url(url)
+        if clean != url:
+            await page.goto(clean, wait_until="domcontentloaded", timeout=30000)
         # Check for bot detection
         content = await page.content()
         if "captcha" in content.lower():

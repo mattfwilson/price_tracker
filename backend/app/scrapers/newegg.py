@@ -20,9 +20,18 @@ class NeweggExtractor(BaseExtractor):
         return ["newegg.com", "www.newegg.com"]
 
     async def extract(self, page: Page, url: str) -> ScrapeData:
-        # Check for bot detection
-        content = await page.content()
-        if "captcha" in content.lower() or "are you a human" in content.lower():
+        # Wait for product content to render after domcontentloaded
+        try:
+            await page.wait_for_selector(".price-current, .product-title", timeout=8000)
+        except Exception:
+            pass  # Fall through; bot-detection check below will catch true blocks
+
+        # Check for bot detection via title/URL — avoids false positives from footer text
+        title = (await page.title()).lower()
+        current_url = page.url.lower()
+        if any(s in title for s in ["just a moment", "are you a human", "checking your browser"]):
+            raise ScrapeError(FailureType.BLOCKED, "Cloudflare challenge on Newegg page")
+        if any(s in current_url for s in ["/areyouahuman", "/human-test", "captcha"]):
             raise ScrapeError(FailureType.BLOCKED, "Bot detection on Newegg page")
 
         # Try JSON-LD first (Newegg typically has good JSON-LD)

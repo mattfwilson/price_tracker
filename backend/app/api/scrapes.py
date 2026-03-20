@@ -38,7 +38,11 @@ async def trigger_scrape(query_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Watch query not found")
 
     bm = await get_browser_manager()
-    job = await run_scrape_job(db, query_id, bm)
+    try:
+        job = await run_scrape_job(db, query_id, bm)
+    finally:
+        # Close Chrome window after every scrape; playwright stays alive for next run
+        await bm.close_browser()
 
     # Evaluate alerts for the scrape results
     from app.services.alert_service import evaluate_alerts_for_job
