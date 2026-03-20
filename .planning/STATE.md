@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-20T19:34:39.146Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-20T19:37:42.877Z"
 last_activity: 2026-03-19 -- Completed 05-02-PLAN.md
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 18
-  completed_plans: 17
+  completed_plans: 18
   percent: 88
 ---
 
@@ -64,6 +64,7 @@ Progress: [█████████░] 88%
 | Phase 05 P03 | 3min | 2 tasks | 6 files |
 | Phase 05 P04 | 4min | 2 tasks | 8 files |
 | Phase 06 P01 | 4min | 3 tasks | 14 files |
+| Phase 06 P02 | 2min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Exported findLowestPriceUrlId from QuerySheet for direct unit testing
 - [Phase 05]: Scrape Now toast already handled in QueryCard; useAlertSSE in Layout for app-wide SSE
 - [Phase 06]: onViewHistory prop optional on ListingRow for backward compatibility
+- [Phase 06]: CSS color variables moved from @theme to @layer base with :root/:dark selectors for dual-theme support
+- [Phase 06]: ThemeProvider wraps at top level with attribute=class and defaultTheme=dark to preserve existing appearance
 
 ### Pending Todos
 
@@ -118,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T19:34:39.142Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-03-20T19:37:42.872Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None

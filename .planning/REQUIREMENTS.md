@@ -45,7 +45,7 @@
 ### UI
 
 - [x] **UI-01**: Within a watch query's results, the listing with the lowest current price is highlighted across retailer URLs
-- [ ] **UI-02**: Application supports dark mode
+- [x] **UI-02**: Application supports dark mode
 
 ## v2 Requirements
 
@@ -108,7 +108,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-03 | Phase 5 | Complete |
 | DASH-04 | Phase 5 | Complete |
 | UI-01 | Phase 5 | Complete |
-| UI-02 | Phase 6 | Pending |
+| UI-02 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 24 total
