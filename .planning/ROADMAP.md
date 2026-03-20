@@ -115,12 +115,11 @@ Plans:
   2. Price history for a listing is displayed as a sortable table with date, price, and delta columns (default: newest first)
   3. User can filter the price history chart and table by time range (7d, 30d, 90d, all)
   4. Application supports dark mode toggle and renders correctly in both light and dark themes
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 06-01: Price history line chart with threshold overlay (Recharts)
-- [ ] 06-02: Price history sortable table with time range filtering
-- [ ] 06-03: Dark mode implementation with Tailwind CSS
+- [ ] 06-01-PLAN.md — Price history chart, sortable table, time range filtering, and QuerySheet/ListingRow wiring
+- [ ] 06-02-PLAN.md — Dark mode with Tailwind CSS v4 @custom-variant, next-themes ThemeProvider, and ThemeToggle
 
 ## Progress
 
@@ -134,4 +133,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. API + Watch Query Management | 2/3 | In Progress|  |
 | 4. Scheduling + Alerts | 2/3 | In Progress|  |
 | 5. Dashboard Frontend | 3/4 | In Progress|  |
-| 6. Price History Visualization + Polish | 0/3 | Not started | - |
+| 6. Price History Visualization + Polish | 0/2 | Not started | - |
