@@ -105,3 +105,15 @@ export interface ScrapeResultResponse {
   delta_cents: number;
   pct_change: number;
 }
+
+export interface HistoryRecord {
+  id: number;
+  product_name: string;
+  price_cents: number;
+  retailer_name: string;
+  listing_url: string;
+  scraped_at: string;
+  direction: "new" | "higher" | "lower" | "unchanged";
+  delta_cents: number;
+  pct_change: number;
+}

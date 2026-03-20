@@ -31,3 +31,19 @@ export function formatRelativeTime(isoString: string): string {
 
   return new Date(isoString).toLocaleDateString();
 }
+
+export function formatDate(isoString: string): string {
+  const d = new Date(isoString);
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function formatChartDate(isoString: string): string {
+  const d = new Date(isoString);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}

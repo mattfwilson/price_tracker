@@ -6,6 +6,7 @@ import type {
   AlertResponse,
   UnreadCountResponse,
   ScrapeJobResponse,
+  HistoryRecord,
 } from "@/types/api";
 
 const API_BASE = "http://localhost:8000";
@@ -68,6 +69,10 @@ export const api = {
       apiFetch<ScrapeJobResponse>(`/watch-queries/${id}/scrape`, {
         method: "POST",
       }),
+  },
+  retailerUrls: {
+    history: (id: number) =>
+      apiFetch<HistoryRecord[]>(`/retailer-urls/${id}/history`),
   },
   alerts: {
     list: (limit?: number) =>

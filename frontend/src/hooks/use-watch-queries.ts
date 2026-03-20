@@ -7,6 +7,8 @@ export const queryKeys = {
   watchQueryDetail: (id: number) => ["watch-queries", id] as const,
   alerts: ["alerts"] as const,
   unreadCount: ["alerts", "unread-count"] as const,
+  listingHistory: (retailerUrlId: number) =>
+    ["listing-history", retailerUrlId] as const,
 };
 
 export function useWatchQueries() {
@@ -63,8 +65,14 @@ export function useScrapeNow() {
   return useMutation({
     mutationFn: (id: number) => api.watchQueries.scrape(id),
     onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({
+      // Refetch detail immediately so the price updates without waiting for
+      // the background scheduler. Also invalidate the list so the card header
+      // status stays in sync.
+      queryClient.refetchQueries({
         queryKey: queryKeys.watchQueryDetail(id),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.watchQueries,
       });
     },
   });
@@ -80,6 +88,14 @@ export function usePauseQuery() {
         queryKey: queryKeys.watchQueryDetail(id),
       });
     },
+  });
+}
+
+export function useListingHistory(retailerUrlId: number | null) {
+  return useQuery({
+    queryKey: queryKeys.listingHistory(retailerUrlId!),
+    queryFn: () => api.retailerUrls.history(retailerUrlId!),
+    enabled: retailerUrlId !== null,
   });
 }
 
