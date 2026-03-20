@@ -98,7 +98,7 @@ Plans:
   3. User can drill down into a watch query to see all matched listings, current prices, price deltas, and navigate to price history
   4. Within a watch query's results, the listing with the lowest current price is highlighted across retailer URLs
   5. Watch query CRUD forms (create, edit, pause, delete) are functional in the UI
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 Plans:
 - [ ] 05-01-PLAN.md — React + Vite + shadcn/ui scaffold, TypeScript types, API client, TanStack Query hooks, layout shell
@@ -133,5 +133,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Scraping Engine | 3/3 | Complete   | 2026-03-19 |
 | 3. API + Watch Query Management | 2/3 | In Progress|  |
 | 4. Scheduling + Alerts | 2/3 | In Progress|  |
-| 5. Dashboard Frontend | 0/4 | Not started | - |
+| 5. Dashboard Frontend | 3/4 | In Progress|  |
 | 6. Price History Visualization + Polish | 0/3 | Not started | - |
