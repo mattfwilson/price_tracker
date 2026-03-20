@@ -37,6 +37,8 @@ interface FormErrors {
 }
 
 const SCHEDULE_OPTIONS = [
+  { value: "every_1h", label: "Every 1 hour" },
+  { value: "every_3h", label: "Every 3 hours" },
   { value: "every_6h", label: "Every 6 hours" },
   { value: "every_12h", label: "Every 12 hours" },
   { value: "daily", label: "Daily" },

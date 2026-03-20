@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
 SCHEDULE_MAP: dict[str, dict] = {
+    "every_1h": {"hours": 1},
+    "every_3h": {"hours": 3},
     "every_6h": {"hours": 6},
     "every_12h": {"hours": 12},
     "daily": {"days": 1},

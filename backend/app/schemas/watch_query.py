@@ -21,7 +21,7 @@ class WatchQueryCreate(BaseModel):
     name: str  # 1-255 chars
     threshold_cents: int  # positive integer
     urls: list[str]  # at least 1 URL
-    schedule: str = "daily"  # daily, weekly, every_6h, every_12h
+    schedule: str = "daily"  # daily, weekly, every_1h, every_3h, every_6h, every_12h
 
     @field_validator("name")
     @classmethod
