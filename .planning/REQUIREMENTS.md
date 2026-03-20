@@ -37,7 +37,7 @@
 
 ### Dashboard
 
-- [ ] **DASH-01**: Dashboard displays all active watch queries with: query name, lowest current price across all retailers, last scrape timestamp, and scrape status
+- [x] **DASH-01**: Dashboard displays all active watch queries with: query name, lowest current price across all retailers, last scrape timestamp, and scrape status
 - [ ] **DASH-02**: Queries with at least one listing at or below threshold are visually highlighted (color/badge)
 - [ ] **DASH-03**: User can drill down into a watch query to see all matched listings, current prices, price deltas, and price history chart/table
 - [ ] **DASH-04**: Each query card shows a scrape status indicator (success / error / running / paused)
@@ -103,7 +103,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALERT-02 | Phase 4 | Complete |
 | ALERT-03 | Phase 4 | Complete |
 | ALERT-04 | Phase 4 | Complete |
-| DASH-01 | Phase 5 | Pending |
+| DASH-01 | Phase 5 | Complete |
 | DASH-02 | Phase 5 | Pending |
 | DASH-03 | Phase 5 | Pending |
 | DASH-04 | Phase 5 | Pending |
