@@ -6,9 +6,10 @@ interface ListingRowProps {
   url: RetailerUrlWithLatest;
   isLowest: boolean;
   thresholdCents: number;
+  onViewHistory?: (retailerUrlId: number) => void;
 }
 
-export function ListingRow({ url, isLowest }: ListingRowProps) {
+export function ListingRow({ url, isLowest, onViewHistory }: ListingRowProps) {
   const result = url.latest_result;
 
   if (!result) {
@@ -30,9 +31,9 @@ export function ListingRow({ url, isLowest }: ListingRowProps) {
 
   const deltaColor =
     result.direction === "lower"
-      ? "text-emerald-600"
+      ? "text-emerald-400"
       : result.direction === "higher"
-        ? "text-red-500"
+        ? "text-red-400"
         : "text-zinc-400";
 
   const pctDisplay =
@@ -54,18 +55,18 @@ export function ListingRow({ url, isLowest }: ListingRowProps) {
             {deltaIcon(result.direction)} {pctDisplay}
           </span>
           {isLowest && (
-            <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+            <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
               Lowest
             </Badge>
           )}
         </div>
       </div>
-      <span
-        className="ml-4 text-sm text-muted-foreground/50 cursor-not-allowed"
-        title="Available in next update"
+      <button
+        onClick={() => onViewHistory?.(url.id)}
+        className="ml-4 text-sm text-primary hover:underline cursor-pointer"
       >
         View history
-      </span>
+      </button>
     </div>
   );
 }

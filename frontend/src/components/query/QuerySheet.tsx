@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   Sheet,
   SheetContent,
@@ -10,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useWatchQueryDetail } from "@/hooks/use-watch-queries";
 import { formatPrice } from "@/lib/format";
 import { ListingRow } from "./ListingRow";
+import { PriceHistoryView } from "../history/PriceHistoryView";
 import type { RetailerUrlWithLatest } from "@/types/api";
 
 interface QuerySheetProps {
@@ -34,10 +36,24 @@ export function findLowestPriceUrlId(
 
 export function QuerySheet({ queryId, open, onOpenChange }: QuerySheetProps) {
   const { data: detail, isLoading } = useWatchQueryDetail(queryId);
+  const [selectedListingId, setSelectedListingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    setSelectedListingId(null);
+  }, [open, queryId]);
 
   const lowestPriceUrlId = detail
     ? findLowestPriceUrlId(detail.retailer_urls)
     : null;
+
+  const selectedUrl = detail?.retailer_urls.find(
+    (u) => u.id === selectedListingId,
+  );
+  const selectedProductName =
+    selectedUrl?.latest_result?.product_name ?? "";
+  const selectedRetailerDomain = selectedUrl
+    ? new URL(selectedUrl.url).hostname.replace("www.", "")
+    : "";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -65,29 +81,46 @@ export function QuerySheet({ queryId, open, onOpenChange }: QuerySheetProps) {
 
         {detail && (
           <>
-            <SheetHeader>
-              <SheetTitle className="font-heading">{detail.name}</SheetTitle>
-              <SheetDescription>
-                Threshold: {formatPrice(detail.threshold_cents)}
-              </SheetDescription>
-            </SheetHeader>
+            {selectedListingId && selectedUrl ? (
+              <PriceHistoryView
+                retailerUrlId={selectedListingId}
+                thresholdCents={detail.threshold_cents}
+                productName={selectedProductName}
+                retailerDomain={selectedRetailerDomain}
+                onBack={() => setSelectedListingId(null)}
+              />
+            ) : (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="font-heading">{detail.name}</SheetTitle>
+                  <SheetDescription>
+                    Threshold: {formatPrice(detail.threshold_cents)}
+                  </SheetDescription>
+                </SheetHeader>
 
-            <div className="mt-6 overflow-y-auto flex-1">
-              {detail.retailer_urls.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No listings yet</p>
-              ) : (
-                detail.retailer_urls.map((url, index) => (
-                  <div key={url.id}>
-                    <ListingRow
-                      url={url}
-                      isLowest={url.id === lowestPriceUrlId}
-                      thresholdCents={detail.threshold_cents}
-                    />
-                    {index < detail.retailer_urls.length - 1 && <Separator />}
-                  </div>
-                ))
-              )}
-            </div>
+                <div className="mt-6 overflow-y-auto flex-1">
+                  {detail.retailer_urls.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No listings yet
+                    </p>
+                  ) : (
+                    detail.retailer_urls.map((url, index) => (
+                      <div key={url.id}>
+                        <ListingRow
+                          url={url}
+                          isLowest={url.id === lowestPriceUrlId}
+                          thresholdCents={detail.threshold_cents}
+                          onViewHistory={setSelectedListingId}
+                        />
+                        {index < detail.retailer_urls.length - 1 && (
+                          <Separator />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </>
         )}
       </SheetContent>
