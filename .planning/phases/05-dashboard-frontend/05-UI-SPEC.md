@@ -23,7 +23,7 @@ created: 2026-03-19
 | Icon library | lucide-react |
 | Font | "DM Sans" (body + labels), "Outfit" (headings + display) — loaded via Google Fonts |
 
-**Aesthetic direction:** Utilitarian-refined. Clean data density with generous whitespace, sharp card edges (border-radius from shadcn default), and restrained color usage. The interface should feel like a well-organized control panel — information-dense but never cluttered. Bold typographic hierarchy does the heavy lifting instead of decorative elements.
+**Aesthetic direction:** Utilitarian-refined. Clean data density with generous whitespace, sharp card edges (border-radius from shadcn default), and restrained color usage. The interface should feel like a well-organized control panel — information-dense but never cluttered. Bold typographic hierarchy does the heavy lifting instead of decorative elements. Outfit headings at 700 weight provide visual punch; DM Sans body text stays clean and readable at data-heavy densities.
 
 ### shadcn Components Required
 
