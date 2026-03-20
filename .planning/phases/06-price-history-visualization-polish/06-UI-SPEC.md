@@ -21,8 +21,8 @@ created: 2026-03-20
 | Preset | default, zinc base color, CSS variables enabled |
 | Component library | Radix UI (via shadcn/ui) |
 | Icon library | lucide-react ^0.577.0 |
-| Font (body) | DM Sans (400, 500 weights) |
-| Font (heading) | Outfit (600, 700, 800 weights) |
+| Font (body) | DM Sans (400 weight) |
+| Font (heading) | Outfit (600 weight) |
 | Charting | Recharts ^3.8.0 |
 | Theme engine | next-themes 0.4.6 (attribute="class", defaultTheme="dark") |
 
@@ -53,23 +53,27 @@ Exceptions:
 | Role | Size | Weight | Line Height | Font |
 |------|------|--------|-------------|------|
 | Body | 14px | 400 | 1.5 | DM Sans |
-| Label | 12px | 500 | 1.4 | DM Sans |
+| Label | 12px | 400 | 1.4 | DM Sans |
 | Heading | 18px | 600 | 1.2 | Outfit |
-| Display | 28px | 700 | 1.1 | Outfit |
+| Display | 28px | 600 | 1.1 | Outfit |
+
+Two weights only: 400 (regular) for body and label roles, 600 (semibold) for heading and display roles. Labels are distinguished from body text via smaller size (12px) and uppercase tracking-wide treatment, not by weight.
 
 ### Phase-Specific Typography Usage
 
 | Element | Role | Details |
 |---------|------|---------|
 | History header (product name + retailer) | Heading | 18px Outfit 600, truncate with ellipsis if wider than container |
-| Chart axis tick labels | Label | 12px DM Sans 500, color: muted-foreground |
+| Chart axis tick labels | Label | 12px DM Sans 400, uppercase tracking-wide, color: muted-foreground |
 | Chart tooltip price | Body | 14px DM Sans 400 |
-| Table header cells | Label | 12px DM Sans 500, uppercase tracking-wide |
+| Table header cells | Label | 12px DM Sans 400, uppercase tracking-wide |
 | Table body cells (price) | Body | 14px DM Sans 400, monospace-like via tabular-nums |
 | Table body cells (delta) | Body | 14px DM Sans 400 |
-| Time range filter labels | Label | 12px DM Sans 500 |
+| Time range filter labels | Label | 12px DM Sans 400, uppercase tracking-wide |
 | Empty state heading | Heading | 18px Outfit 600 |
 | Empty state body | Body | 14px DM Sans 400, color: muted-foreground |
+| Error state heading | Heading | 18px Outfit 600 |
+| Error state body | Body | 14px DM Sans 400, color: muted-foreground |
 | Theme toggle | n/a | Icon only (16x16), sr-only label |
 
 ---
@@ -188,6 +192,8 @@ Replace the dark radial glow and dot grid with a light equivalent:
 | Table delta display -- new | "New" as badge |
 | Empty state heading | "No history yet" |
 | Empty state body | "Trigger a scrape to start tracking price changes." |
+| Error state heading | "Couldn't load history" |
+| Error state body | "Check your connection and try again." with a "Retry" button (ghost variant, triggers re-fetch of history endpoint) |
 | Loading state | Skeleton: 300px height block for chart area + 3 skeleton rows for table |
 | Theme toggle tooltip | "Toggle theme" (sr-only) |
 | Date format (table) | "Mar 20, 2026 2:30 PM" (toLocaleDateString + toLocaleTimeString, short month) |
@@ -255,6 +261,11 @@ No destructive actions in this phase -- no confirmation dialogs needed.
 | State | Visual |
 |-------|--------|
 | Fetching history | Skeleton pulse: one 300px-tall block (chart area) + 3 table row skeletons (h-10 each, 8px gap) |
+
+### Error State
+| State | Visual |
+|-------|--------|
+| API fetch failed | Centered layout: "Couldn't load history" as Heading (18px Outfit 600), "Check your connection and try again." as Body (14px DM Sans 400, muted-foreground) below, "Retry" ghost Button below body text. Replaces chart+table area entirely. |
 
 ### Chart Interactions
 | State | Visual |
