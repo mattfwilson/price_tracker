@@ -1,7 +1,10 @@
 import { Outlet } from "react-router-dom";
 import { Header } from "./Header";
+import { useAlertSSE } from "@/hooks/use-sse";
 
 export function Layout() {
+  useAlertSSE();
+
   return (
     <>
       <Header />
