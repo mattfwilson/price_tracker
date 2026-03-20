@@ -50,6 +50,9 @@ class BaseExtractor(ABC):
         """URL domain patterns this extractor handles."""
         ...
 
+    async def pre_navigate(self, page: Page, url: str) -> None:
+        """Optional hook called before page.goto(url). Override for site-specific warm-up."""
+
     @abstractmethod
     async def extract(self, page: Page, url: str) -> ScrapeData:
         """Extract product data from page. Raise ScrapeError on failure."""
@@ -57,7 +60,7 @@ class BaseExtractor(ABC):
 
     def _parse_price_to_cents(self, price_str: str) -> int:
         """Common price parsing: '$1,299.99' -> 129999"""
-        cleaned = price_str.replace("$", "").replace(",", "").strip()
+        cleaned = "".join(price_str.split()).replace("$", "").replace(",", "")
         return int(round(float(cleaned) * 100))
 
     async def _try_json_ld(self, page: Page) -> ScrapeData | None:

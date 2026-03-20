@@ -46,7 +46,8 @@ async def scrape_single_url(
     page = await browser_manager.new_page()
     try:
         await asyncio.sleep(random.uniform(0.5, 2.0))  # human simulation delay
-        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        await extractor.pre_navigate(page, url)
+        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
         return await extractor.extract(page, url)
     except ScrapeError:
         raise
