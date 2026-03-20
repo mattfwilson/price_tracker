@@ -98,13 +98,13 @@ Plans:
   3. User can drill down into a watch query to see all matched listings, current prices, price deltas, and navigate to price history
   4. Within a watch query's results, the listing with the lowest current price is highlighted across retailer URLs
   5. Watch query CRUD forms (create, edit, pause, delete) are functional in the UI
-**Plans**: TBD
+**Plans:** 4 plans
 
 Plans:
-- [ ] 05-01: React + Vite + TypeScript scaffold with API client and TanStack Query setup
-- [ ] 05-02: Dashboard view with query cards, status indicators, and threshold highlighting
-- [ ] 05-03: Watch query CRUD forms and drill-down view with listing details
-- [ ] 05-04: Alert notification badge, toast, and alert log view with SSE integration
+- [ ] 05-01-PLAN.md — React + Vite + shadcn/ui scaffold, TypeScript types, API client, TanStack Query hooks, layout shell
+- [ ] 05-02-PLAN.md — Dashboard page with query card grid, status indicators, threshold highlighting
+- [ ] 05-03-PLAN.md — Drill-down slide-over with listing details, CRUD form dialogs, delete confirmation
+- [ ] 05-04-PLAN.md — Alert bell dropdown, SSE toast hook, alert log page, final dashboard wiring
 
 ### Phase 6: Price History Visualization + Polish
 **Goal**: Users can explore detailed price history through interactive charts and tables, and the application has a polished visual experience with dark mode
