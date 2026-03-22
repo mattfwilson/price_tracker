@@ -47,6 +47,14 @@
 - [x] **UI-01**: Within a watch query's results, the listing with the lowest current price is highlighted across retailer URLs
 - [x] **UI-02**: Application supports dark mode
 
+## v1.1 Requirements (Phase 7 additions)
+
+### Alert Enhancements
+
+- [x] **ALERT-05**: System triggers an alert when a scraped price drops by a configurable percentage (e.g., 10%) below the rolling 30-day average price for that listing — configurable per watch query, evaluated in addition to the absolute threshold check
+- [ ] **ALERT-06**: QueryCard displays an "all-time low" badge when the current lowest price across all retailers is the lowest price ever recorded for that watch query
+- [x] **ALERT-07**: Alert cooldown prevents duplicate alerts from firing within a configurable time window (default 24h) when price fluctuates around a threshold — configurable per watch query
+
 ## v2 Requirements
 
 ### Notifications
@@ -109,10 +117,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-04 | Phase 5 | Complete |
 | UI-01 | Phase 5 | Complete |
 | UI-02 | Phase 6 | Complete |
+| ALERT-05 | Phase 7 | Planned |
+| ALERT-06 | Phase 7 | Planned |
+| ALERT-07 | Phase 7 | Planned |
 
 **Coverage:**
 - v1 requirements: 24 total
-- Mapped to phases: 24
+- v1.1 requirements: 3 total (Phase 7)
+- Mapped to phases: 27
 - Unmapped: 0
 
 ---
