@@ -32,6 +32,8 @@ interface QueryFormDialogProps {
 interface FormErrors {
   name?: string;
   threshold?: string;
+  pctDrop?: string;
+  cooldown?: string;
   urls?: string;
   urlErrors?: Record<number, string>;
 }
@@ -54,6 +56,8 @@ export function QueryFormDialog({
   const [threshold, setThreshold] = useState("");
   const [schedule, setSchedule] = useState("daily");
   const [urls, setUrls] = useState<string[]>([""]);
+  const [pctDrop, setPctDrop] = useState("");
+  const [cooldownHours, setCooldownHours] = useState("24");
   const [errors, setErrors] = useState<FormErrors>({});
 
   const createMutation = useCreateWatchQuery();
@@ -74,11 +78,15 @@ export function QueryFormDialog({
             ? editQuery.retailer_urls.map((u) => u.url)
             : [""]
         );
+        setPctDrop(editQuery.pct_drop_threshold != null ? String(editQuery.pct_drop_threshold) : "");
+        setCooldownHours(String(editQuery.alert_cooldown_hours));
       } else {
         setName("");
         setThreshold("");
         setSchedule("daily");
         setUrls([""]);
+        setPctDrop("");
+        setCooldownHours("24");
       }
       setErrors({});
     }
@@ -97,6 +105,18 @@ export function QueryFormDialog({
       parseFloat(threshold) <= 0
     ) {
       newErrors.threshold = "Enter a valid dollar amount (e.g. 400.00)";
+    }
+
+    if (pctDrop.trim() !== "") {
+      const pctVal = parseFloat(pctDrop);
+      if (isNaN(pctVal) || pctVal <= 0 || pctVal > 100) {
+        newErrors.pctDrop = "Enter a value between 0 and 100, or leave empty to disable";
+      }
+    }
+
+    const cooldownVal = parseInt(cooldownHours, 10);
+    if (isNaN(cooldownVal) || cooldownVal < 0) {
+      newErrors.cooldown = "Enter 0 or more hours";
     }
 
     const cleanUrls = urls.filter((u) => u.trim() !== "");
@@ -134,6 +154,8 @@ export function QueryFormDialog({
             threshold_cents: thresholdCents,
             schedule,
             urls: cleanUrls,
+            pct_drop_threshold: pctDrop.trim() !== "" ? parseFloat(pctDrop) : null,
+            alert_cooldown_hours: parseInt(cooldownHours, 10),
           },
         });
       } else {
@@ -142,6 +164,8 @@ export function QueryFormDialog({
           threshold_cents: thresholdCents,
           urls: cleanUrls,
           schedule,
+          pct_drop_threshold: pctDrop.trim() !== "" ? parseFloat(pctDrop) : null,
+          alert_cooldown_hours: parseInt(cooldownHours, 10),
         });
       }
       onOpenChange(false);
@@ -227,6 +251,43 @@ export function QueryFormDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Percentage Drop Threshold - optional */}
+          <div className="space-y-2">
+            <Label htmlFor="query-pct-drop">Price Drop Alert (%)</Label>
+            <Input
+              id="query-pct-drop"
+              type="text"
+              inputMode="decimal"
+              placeholder="e.g. 10 (leave empty to disable)"
+              value={pctDrop}
+              onChange={(e) => setPctDrop(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Alert when price drops this % below 30-day average
+            </p>
+            {errors.pctDrop && (
+              <p className="text-sm text-destructive">{errors.pctDrop}</p>
+            )}
+          </div>
+
+          {/* Alert Cooldown */}
+          <div className="space-y-2">
+            <Label htmlFor="query-cooldown">Alert Cooldown (hours)</Label>
+            <Input
+              id="query-cooldown"
+              type="number"
+              min="0"
+              value={cooldownHours}
+              onChange={(e) => setCooldownHours(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Suppress repeat alerts within this time window (0 to disable)
+            </p>
+            {errors.cooldown && (
+              <p className="text-sm text-destructive">{errors.cooldown}</p>
+            )}
           </div>
 
           {/* Retailer URLs */}
