@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Scheduling + Alerts** - APScheduler background jobs and threshold-based alert system with SSE notifications
 - [ ] **Phase 5: Dashboard Frontend** - React dashboard with query cards, drill-down views, and visual indicators
 - [ ] **Phase 6: Price History Visualization + Polish** - Price history charts, tables, time filtering, and dark mode
+- [ ] **Phase 7: Advanced Alert Enhancements** - Percentage-based price drop alerts, all-time low badge on QueryCard, and alert cooldown to prevent threshold spam
 
 ## Phase Details
 
@@ -121,10 +122,25 @@ Plans:
 - [ ] 06-01-PLAN.md — Price history chart, sortable table, time range filtering, and QuerySheet/ListingRow wiring
 - [ ] 06-02-PLAN.md — Dark mode with Tailwind CSS v4 @custom-variant, next-themes ThemeProvider, and ThemeToggle
 
+### Phase 7: Advanced Alert Enhancements
+**Goal**: Alerting becomes smarter and less spammy — users get notified on meaningful price drops (percentage-based), see at a glance when a price is an all-time low, and aren't bombarded by repeated alerts when a price oscillates around a threshold
+**Depends on**: Phase 6
+**Requirements**: ALERT-05, ALERT-06, ALERT-07
+**Success Criteria** (what must be TRUE):
+  1. A configurable percentage drop alert fires when a scraped price is X% below the rolling 30-day average for that listing (configurable per watch query, stored alongside the absolute threshold)
+  2. QueryCard displays an "all-time low" badge when the current lowest price across all retailers for that watch query is the lowest price ever recorded in scrape_results for that query
+  3. Alert cooldown prevents a new alert from firing within a configurable time window (default 24h) after the last alert for the same watch query; the cooldown period is configurable per watch query
+**Plans:** 3 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Alembic migration, model/schema/repo extensions, alert service cooldown + pct drop logic with tests
+- [ ] 07-02-PLAN.md — API endpoint wiring for new fields, is_all_time_low computation on detail endpoint
+- [ ] 07-03-PLAN.md — Frontend TypeScript types, All-Time Low badge on QueryCard, form fields for pct drop and cooldown
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -134,3 +150,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 4. Scheduling + Alerts | 2/3 | In Progress|  |
 | 5. Dashboard Frontend | 3/4 | In Progress|  |
 | 6. Price History Visualization + Polish | 1/2 | In Progress|  |
+| 7. Advanced Alert Enhancements | 0/3 | Planned |  |
