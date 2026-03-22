@@ -74,3 +74,27 @@ async def get_latest_scrape_result(
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def get_last_price_change_result(
+    session: AsyncSession,
+    retailer_url_id: int,
+    current_price_cents: int,
+) -> ScrapeResult | None:
+    """Get the most recent scrape result whose price differs from current_price_cents.
+
+    Used by the dashboard to determine the direction and magnitude of the last
+    meaningful price movement. Comparing against the immediately preceding record
+    would show 'unchanged' whenever consecutive scrapes return the same price,
+    masking the real trend. This query skips over same-price records to find the
+    last time the price was actually different.
+    """
+    stmt = (
+        select(ScrapeResult)
+        .where(ScrapeResult.retailer_url_id == retailer_url_id)
+        .where(ScrapeResult.price_cents != current_price_cents)
+        .order_by(ScrapeResult.created_at.desc(), ScrapeResult.id.desc())
+        .limit(1)
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()

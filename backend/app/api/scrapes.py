@@ -113,16 +113,20 @@ async def get_history(retailer_url_id: int, db: AsyncSession = Depends(get_db)):
     if not records:
         return []
 
-    # Compute deltas using calculate_price_delta() per locked user decision.
-    # Records are newest-first. For each record, pass the previous (older) record's
-    # price_cents via the previous_price_cents parameter so calculate_price_delta()
-    # compares consecutive pairs without a DB lookup.
-    # The oldest record has no previous record in the series, so it is marked "new".
+    # Deduplicate consecutive same-price records so the history only surfaces
+    # actual price movements. We always keep the most recent record (index 0)
+    # so the "last checked" entry is always visible, then skip any subsequent
+    # record whose price matches the one directly before it in the filtered list.
+    deduped: list = [records[0]]
+    for rec in records[1:]:
+        if rec.price_cents != deduped[-1].price_cents:
+            deduped.append(rec)
+
+    # Compute deltas for the deduplicated list. Records are newest-first.
     history = []
-    for i, rec in enumerate(records):
-        if i < len(records) - 1:
-            # Previous record exists (the one right after in the list = older)
-            prev_price = records[i + 1].price_cents
+    for i, rec in enumerate(deduped):
+        if i < len(deduped) - 1:
+            prev_price = deduped[i + 1].price_cents
             delta = await calculate_price_delta(
                 db,
                 retailer_url_id,
@@ -130,7 +134,6 @@ async def get_history(retailer_url_id: int, db: AsyncSession = Depends(get_db)):
                 previous_price_cents=prev_price,
             )
         else:
-            # Oldest record -- no previous in the series; this is the first-ever scrape
             delta = {"direction": "new", "delta_cents": 0, "pct_change": 0.0}
 
         history.append(

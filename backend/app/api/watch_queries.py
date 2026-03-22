@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.retailer_url import RetailerUrl
-from app.repositories.scrape_result import get_latest_scrape_result
+from app.repositories.scrape_result import get_latest_scrape_result, get_last_price_change_result
 from app.repositories.watch_query import (
     create_watch_query,
     delete_watch_query,
@@ -65,7 +65,18 @@ async def get_query(query_id: int, db: AsyncSession = Depends(get_db)):
         latest = await get_latest_scrape_result(db, url_obj.id)
         latest_data = None
         if latest is not None:
-            delta = await calculate_price_delta(db, url_obj.id, latest.price_cents)
+            # Find the last record with a different price to show the direction
+            # of the most recent meaningful price movement. Comparing against the
+            # immediately previous record would always return "unchanged" when
+            # consecutive scrapes return the same price, hiding the real trend.
+            prev = await get_last_price_change_result(db, url_obj.id, latest.price_cents)
+            if prev is not None:
+                delta = await calculate_price_delta(
+                    db, url_obj.id, latest.price_cents,
+                    previous_price_cents=prev.price_cents,
+                )
+            else:
+                delta = {"direction": "new", "delta_cents": 0, "pct_change": 0.0}
             latest_data = LatestScrapeResult(
                 product_name=latest.product_name,
                 price_cents=latest.price_cents,
