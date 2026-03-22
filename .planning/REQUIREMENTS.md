@@ -52,7 +52,7 @@
 ### Alert Enhancements
 
 - [x] **ALERT-05**: System triggers an alert when a scraped price drops by a configurable percentage (e.g., 10%) below the rolling 30-day average price for that listing — configurable per watch query, evaluated in addition to the absolute threshold check
-- [ ] **ALERT-06**: QueryCard displays an "all-time low" badge when the current lowest price across all retailers is the lowest price ever recorded for that watch query
+- [x] **ALERT-06**: QueryCard displays an "all-time low" badge when the current lowest price across all retailers is the lowest price ever recorded for that watch query
 - [x] **ALERT-07**: Alert cooldown prevents duplicate alerts from firing within a configurable time window (default 24h) when price fluctuates around a threshold — configurable per watch query
 
 ## v2 Requirements

@@ -135,7 +135,7 @@ Plans:
 Plans:
 - [x] 07-01-PLAN.md — Alembic migration, model/schema/repo extensions, alert service cooldown + pct drop logic with tests
 - [ ] 07-02-PLAN.md — API endpoint wiring for new fields, is_all_time_low computation on detail endpoint
-- [ ] 07-03-PLAN.md — Frontend TypeScript types, All-Time Low badge on QueryCard, form fields for pct drop and cooldown
+- [x] 07-03-PLAN.md — Frontend TypeScript types, All-Time Low badge on QueryCard, form fields for pct drop and cooldown
 
 ## Progress
 
