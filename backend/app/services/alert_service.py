@@ -79,6 +79,26 @@ async def should_fire_alert(
     return True
 
 
+async def should_fire_pct_drop_alert(
+    session: AsyncSession,
+    retailer_url_id: int,
+    current_price_cents: int,
+    pct_drop_threshold: float,
+    min_samples: int = 3,
+) -> bool:
+    """Check if current price is X% below the 30-day rolling average.
+
+    Returns False if fewer than min_samples results exist in the window.
+    """
+    from app.repositories.scrape_result import get_rolling_avg_price
+
+    avg_price, count = await get_rolling_avg_price(session, retailer_url_id)
+    if count < min_samples or avg_price is None:
+        return False
+    target = int(avg_price * (1 - pct_drop_threshold / 100))
+    return current_price_cents <= target
+
+
 async def evaluate_alerts_for_job(
     session: AsyncSession,
     watch_query_id: int,
@@ -86,14 +106,23 @@ async def evaluate_alerts_for_job(
 ) -> list[Alert]:
     """Evaluate all scrape results from a job and create alerts for threshold breaches.
 
+    Checks cooldown before evaluating. Supports both threshold and pct_drop alerts.
     Returns list of created Alert records.
     """
+    from app.repositories.alert import is_within_cooldown
+
     # Load WatchQuery
     stmt = select(WatchQuery).where(WatchQuery.id == watch_query_id)
     result = await session.execute(stmt)
     wq = result.scalar_one_or_none()
     if wq is None:
         return []
+
+    # Cooldown check
+    if wq.alert_cooldown_hours > 0:
+        if await is_within_cooldown(session, watch_query_id, wq.alert_cooldown_hours):
+            logger.info("Watch query %d within cooldown, skipping alerts", watch_query_id)
+            return []
 
     # Query all ScrapeResults for this job
     stmt = select(ScrapeResult).where(ScrapeResult.scrape_job_id == scrape_job_id)
@@ -102,8 +131,18 @@ async def evaluate_alerts_for_job(
 
     created_alerts: list[Alert] = []
     for sr in scrape_results:
-        if await should_fire_alert(session, sr.retailer_url_id, sr.price_cents, wq.threshold_cents):
-            alert = await create_alert(session, sr.id, watch_query_id)
+        threshold_fired = await should_fire_alert(
+            session, sr.retailer_url_id, sr.price_cents, wq.threshold_cents
+        )
+        pct_fired = False
+        if wq.pct_drop_threshold is not None:
+            pct_fired = await should_fire_pct_drop_alert(
+                session, sr.retailer_url_id, sr.price_cents, wq.pct_drop_threshold
+            )
+
+        if threshold_fired or pct_fired:
+            alert_type = "pct_drop" if (pct_fired and not threshold_fired) else "threshold"
+            alert = await create_alert(session, sr.id, watch_query_id, alert_type=alert_type)
             created_alerts.append(alert)
 
             # Build SSE payload and broadcast
@@ -116,6 +155,7 @@ async def evaluate_alerts_for_job(
                 "price_cents": sr.price_cents,
                 "retailer_name": sr.retailer_name,
                 "listing_url": sr.listing_url,
+                "alert_type": alert_type,
                 "created_at": alert.created_at.isoformat() if alert.created_at else None,
                 "unread_count": unread,
             }

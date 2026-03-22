@@ -12,10 +12,10 @@ from app.models.alert import Alert
 
 
 async def create_alert(
-    session: AsyncSession, scrape_result_id: int, watch_query_id: int
+    session: AsyncSession, scrape_result_id: int, watch_query_id: int, alert_type: str = "threshold"
 ) -> Alert:
     """Create and flush (not commit) an Alert record."""
-    alert = Alert(scrape_result_id=scrape_result_id, watch_query_id=watch_query_id)
+    alert = Alert(scrape_result_id=scrape_result_id, watch_query_id=watch_query_id, alert_type=alert_type)
     session.add(alert)
     await session.flush()
     return alert

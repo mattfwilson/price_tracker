@@ -207,18 +207,25 @@ class TestCooldown:
 
     @pytest.mark.asyncio
     async def test_cooldown_expired(self, db_session, watch_query, retailer_url, scrape_job):
-        """Alert 25h ago, cooldown=24h, new breach -> 1 alert."""
+        """Alert 25h ago, cooldown=24h, price recovered then re-breached -> 1 alert."""
+        now = datetime.utcnow()
+        # Old breach that triggered an alert
         sr = await _create_result(db_session, retailer_url.id, scrape_job.id, 800,
-                                  created_at=datetime.utcnow() - timedelta(hours=26))
+                                  created_at=now - timedelta(hours=26))
         old_alert = Alert(scrape_result_id=sr.id, watch_query_id=watch_query.id)
-        old_alert.created_at = datetime.utcnow() - timedelta(hours=25)
+        old_alert.created_at = now - timedelta(hours=25)
         db_session.add(old_alert)
         await db_session.flush()
 
+        # Price recovered above threshold (needed for re-breach detection)
+        await _create_result(db_session, retailer_url.id, scrape_job.id, 1200,
+                             created_at=now - timedelta(hours=2))
+
         job2 = ScrapeJob(watch_query_id=watch_query.id, status="success",
-                         started_at=datetime.utcnow(), completed_at=datetime.utcnow())
+                         started_at=now, completed_at=now)
         db_session.add(job2)
         await db_session.flush()
+        # Re-breach: price drops below threshold again
         await _create_result(db_session, retailer_url.id, job2.id, 700)
 
         alerts = await evaluate_alerts_for_job(db_session, watch_query.id, job2.id)
@@ -227,6 +234,7 @@ class TestCooldown:
     @pytest.mark.asyncio
     async def test_cooldown_disabled(self, db_session):
         """cooldown_hours=0 -> alerts always fire even if recent alert exists."""
+        now = datetime.utcnow()
         wq = WatchQuery(name="No Cooldown", threshold_cents=1000, is_active=True,
                          schedule="daily", alert_cooldown_hours=0)
         db_session.add(wq)
@@ -237,21 +245,25 @@ class TestCooldown:
         await db_session.flush()
 
         job = ScrapeJob(watch_query_id=wq.id, status="success",
-                        started_at=datetime.utcnow(), completed_at=datetime.utcnow())
+                        started_at=now, completed_at=now)
         db_session.add(job)
         await db_session.flush()
 
-        # Create a recent alert
+        # Create a recent breach + alert
         sr = await _create_result(db_session, ru.id, job.id, 800,
-                                  created_at=datetime.utcnow() - timedelta(minutes=30))
+                                  created_at=now - timedelta(minutes=30))
         old_alert = Alert(scrape_result_id=sr.id, watch_query_id=wq.id)
-        old_alert.created_at = datetime.utcnow() - timedelta(minutes=30)
+        old_alert.created_at = now - timedelta(minutes=30)
         db_session.add(old_alert)
         await db_session.flush()
 
-        # New job
+        # Price recovers above threshold
+        await _create_result(db_session, ru.id, job.id, 1200,
+                             created_at=now - timedelta(minutes=10))
+
+        # New job: re-breach
         job2 = ScrapeJob(watch_query_id=wq.id, status="success",
-                         started_at=datetime.utcnow(), completed_at=datetime.utcnow())
+                         started_at=now, completed_at=now)
         db_session.add(job2)
         await db_session.flush()
         await _create_result(db_session, ru.id, job2.id, 700)
