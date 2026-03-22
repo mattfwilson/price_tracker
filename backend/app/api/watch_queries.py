@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.retailer_url import RetailerUrl
-from app.repositories.scrape_result import get_latest_scrape_result, get_last_price_change_result
+from app.repositories.scrape_result import get_all_time_min_price, get_latest_scrape_result, get_last_price_change_result, get_last_scrape_job
 from app.repositories.watch_query import (
     create_watch_query,
     delete_watch_query,
@@ -35,6 +35,8 @@ async def create(payload: WatchQueryCreate, db: AsyncSession = Depends(get_db)):
         name=payload.name,
         threshold_cents=payload.threshold_cents,
         urls=unique_urls,
+        pct_drop_threshold=payload.pct_drop_threshold,
+        alert_cooldown_hours=payload.alert_cooldown_hours,
     )
 
     # Register scheduler job for the new active query
@@ -93,13 +95,39 @@ async def get_query(query_id: int, db: AsyncSession = Depends(get_db)):
             )
         )
 
+    # Compute is_all_time_low
+    all_time_min = await get_all_time_min_price(db, query_id)
+    current_prices = [
+        url_data.latest_result.price_cents
+        for url_data in urls_with_latest
+        if url_data.latest_result is not None
+    ]
+    current_lowest = min(current_prices) if current_prices else None
+    is_all_time_low = (
+        current_lowest is not None
+        and all_time_min is not None
+        and current_lowest <= all_time_min
+    )
+
+    last_job = await get_last_scrape_job(db, query_id)
+
+    from app.services.scheduler import scheduler as apscheduler
+    sched_job = apscheduler.get_job(f"scrape_query_{query_id}")
+    next_run_at = getattr(sched_job, 'next_run_time', None) if sched_job else None
+
     return WatchQueryDetailResponse(
         id=query.id,
         name=query.name,
         threshold_cents=query.threshold_cents,
         is_active=query.is_active,
         schedule=query.schedule,
+        pct_drop_threshold=query.pct_drop_threshold,
+        alert_cooldown_hours=query.alert_cooldown_hours,
+        is_all_time_low=is_all_time_low,
         retailer_urls=urls_with_latest,
+        last_job_status=last_job.status if last_job else None,
+        last_job_error=last_job.error_message if last_job else None,
+        next_run_at=next_run_at,
         created_at=query.created_at,
         updated_at=query.updated_at,
     )

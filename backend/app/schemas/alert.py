@@ -14,6 +14,7 @@ class AlertResponse(BaseModel):
     retailer_name: str
     listing_url: str
     is_read: bool
+    alert_type: str = "threshold"
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
