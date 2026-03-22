@@ -208,6 +208,20 @@ async def test_unread_count(client_with_db):
 
 
 @pytest.mark.asyncio
+async def test_alert_response_includes_alert_type(client_with_db):
+    """Alert response includes alert_type field."""
+    client, session_factory = client_with_db
+    await seed_alert(session_factory)
+
+    response = await client.get("/alerts/")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert "alert_type" in data[0]
+    assert data[0]["alert_type"] == "threshold"
+
+
+@pytest.mark.asyncio
 async def test_unread_count_after_read(client_with_db):
     client, session_factory = client_with_db
     ids = await seed_alert(session_factory, is_read=False)
