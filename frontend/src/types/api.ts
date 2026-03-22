@@ -25,6 +25,8 @@ export interface WatchQueryResponse {
   id: number;
   name: string;
   threshold_cents: number;
+  pct_drop_threshold: number | null;
+  alert_cooldown_hours: number;
   is_active: boolean;
   schedule: string;
   retailer_urls: RetailerUrlResponse[];
@@ -36,9 +38,15 @@ export interface WatchQueryDetailResponse {
   id: number;
   name: string;
   threshold_cents: number;
+  pct_drop_threshold: number | null;
+  alert_cooldown_hours: number;
   is_active: boolean;
   schedule: string;
   retailer_urls: RetailerUrlWithLatest[];
+  last_job_status: "success" | "failed" | "partial_success" | null;
+  last_job_error: string | null;
+  next_run_at: string | null;
+  is_all_time_low: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +56,8 @@ export interface WatchQueryCreate {
   threshold_cents: number;
   urls: string[];
   schedule: string;
+  pct_drop_threshold?: number | null;
+  alert_cooldown_hours?: number;
 }
 
 export interface WatchQueryUpdate {
@@ -56,6 +66,8 @@ export interface WatchQueryUpdate {
   is_active?: boolean;
   schedule?: string;
   urls?: string[];
+  pct_drop_threshold?: number | null;
+  alert_cooldown_hours?: number;
 }
 
 export interface AlertResponse {
@@ -66,6 +78,7 @@ export interface AlertResponse {
   price_cents: number;
   retailer_name: string;
   listing_url: string;
+  alert_type: string;
   is_read: boolean;
   created_at: string;
 }

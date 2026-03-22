@@ -4,8 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatPrice, deltaIcon, formatRelativeTime } from "@/lib/format";
+import { formatPrice, deltaIcon, formatRelativeTime, formatScheduleLabel, formatTimeUntil } from "@/lib/format";
 import { useWatchQueryDetail, useScrapeNow } from "@/hooks/use-watch-queries";
+import { Clock } from "lucide-react";
 import { StatusDot, deriveStatus } from "./StatusDot";
 import { CardMenu } from "./CardMenu";
 import type { WatchQueryResponse } from "@/types/api";
@@ -140,6 +141,11 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete }: QueryCardPro
                 Below threshold
               </Badge>
             )}
+            {detail?.is_all_time_low && (
+              <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30">
+                All-Time Low
+              </Badge>
+            )}
           </div>
         ) : (
           <div className="space-y-1">
@@ -161,6 +167,20 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete }: QueryCardPro
             <span className="text-xs text-muted-foreground">
               {formatRelativeTime(latestScrapedAt)}
             </span>
+          )}
+        </div>
+
+        {/* Schedule line */}
+        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="h-3 w-3 shrink-0" />
+          <span>{formatScheduleLabel(query.schedule)}</span>
+          {detail?.next_run_at && query.is_active && (
+            <span className="text-muted-foreground/60">
+              · {formatTimeUntil(detail.next_run_at)}
+            </span>
+          )}
+          {!query.is_active && (
+            <span className="text-muted-foreground/60">· paused</span>
           )}
         </div>
       </CardContent>
