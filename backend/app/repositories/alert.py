@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -63,3 +65,16 @@ async def dismiss_all_alerts(session: AsyncSession) -> int:
     result = await session.execute(stmt)
     await session.flush()
     return result.rowcount
+
+
+async def is_within_cooldown(
+    session: AsyncSession, watch_query_id: int, cooldown_hours: int
+) -> bool:
+    """Check if the most recent alert for this watch query is within the cooldown window."""
+    stmt = select(func.max(Alert.created_at)).where(Alert.watch_query_id == watch_query_id)
+    result = await session.execute(stmt)
+    last_alert_at = result.scalar_one_or_none()
+    if last_alert_at is None:
+        return False
+    cutoff = datetime.utcnow() - timedelta(hours=cooldown_hours)
+    return last_alert_at >= cutoff

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Integer, String
+from sqlalchemy import Boolean, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -15,6 +15,8 @@ class WatchQuery(Base, TimestampMixin):
     threshold_cents: Mapped[int] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     schedule: Mapped[str] = mapped_column(String(50), default="daily")
+    pct_drop_threshold: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    alert_cooldown_hours: Mapped[int] = mapped_column(Integer, default=24)
 
     retailer_urls: Mapped[list["RetailerUrl"]] = relationship(
         back_populates="watch_query",

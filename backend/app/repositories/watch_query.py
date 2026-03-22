@@ -13,11 +13,15 @@ async def create_watch_query(
     name: str,
     threshold_cents: int,
     urls: list[str],
+    pct_drop_threshold: float | None = None,
+    alert_cooldown_hours: int = 24,
 ) -> WatchQuery:
     """Create a watch query with associated retailer URLs."""
     query = WatchQuery(
         name=name,
         threshold_cents=threshold_cents,
+        pct_drop_threshold=pct_drop_threshold,
+        alert_cooldown_hours=alert_cooldown_hours,
         retailer_urls=[RetailerUrl(url=u) for u in urls],
     )
     db.add(query)
@@ -57,7 +61,7 @@ async def update_watch_query(
     if query is None:
         return None
 
-    allowed_fields = {"name", "threshold_cents", "is_active", "schedule"}
+    allowed_fields = {"name", "threshold_cents", "is_active", "schedule", "pct_drop_threshold", "alert_cooldown_hours"}
     for key, value in kwargs.items():
         if key in allowed_fields and value is not None:
             setattr(query, key, value)
