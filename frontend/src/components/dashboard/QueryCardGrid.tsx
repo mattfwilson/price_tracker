@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { QueryCard } from "./QueryCard";
 import { NewQueryCard } from "./NewQueryCard";
-import type { WatchQueryResponse } from "@/types/api";
+import type { UrlHealthResponse, WatchQueryResponse } from "@/types/api";
 
 interface QueryCardGridProps {
   queries: WatchQueryResponse[] | undefined;
@@ -14,6 +14,7 @@ interface QueryCardGridProps {
   onNewQuery: () => void;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
+  healthByQuery?: Record<number, UrlHealthResponse[]>;
 }
 
 function SkeletonCard() {
@@ -35,6 +36,7 @@ export function QueryCardGrid({
   onNewQuery,
   onEdit,
   onDelete,
+  healthByQuery,
 }: QueryCardGridProps) {
   if (isLoading) {
     return (
@@ -69,6 +71,7 @@ export function QueryCardGrid({
           onCardClick={onCardClick}
           onEdit={onEdit}
           onDelete={onDelete}
+          healthData={healthByQuery?.[query.id]}
         />
       ))}
       <NewQueryCard onClick={onNewQuery} />
