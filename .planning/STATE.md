@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: scraping-data-quality
-status: defining-requirements
+status: ready-to-plan
 stopped_at: null
 last_updated: "2026-03-22T00:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 10
   completed_plans: 0
 ---
 
@@ -19,53 +19,36 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** The full loop must work -- a scheduled scrape runs automatically, finds a price at or below the configured threshold, and triggers a visible in-app alert without manual intervention.
-**Current focus:** Milestone v1.1 — Scraping & Data Quality
+**Current focus:** Milestone v1.1 -- Phase 8: Scrape Health Dashboard
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-22 — Milestone v1.1 started
+Phase: 8 of 11 (Scrape Health Dashboard)
+Plan: 0 of 3 in current phase
+Status: Ready to plan
+Last activity: 2026-03-22 -- Roadmap created for v1.1 (Phases 8-11)
+
+Progress: [==================..] 70% (v1.0 complete, v1.1 starting)
 
 ## Performance Metrics
 
 **Velocity:**
+- Total plans completed: 21 (v1.0)
+- Average duration: 3min
+- Total execution time: ~1.1 hours
 
-- Total plans completed: 4
-- Average duration: 4min
-- Total execution time: 0.27 hours
-
-**By Phase:**
+**By Phase (recent):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 01-01, 01-02, 01-03 | 12min | 4min |
-| 02 | 02-01 | 4min | 4min |
+| 06 | 06-01, 06-02 | 6min | 3min |
+| 07 | 07-01, 07-02, 07-03 | 9min | 3min |
 
 **Recent Trend:**
-
-- Last 5 plans: -
-- Trend: -
+- Last 5 plans: 2min, 2min, 5min, 2min, 2min
+- Trend: Stable
 
 *Updated after each plan completion*
-| Phase 02 P02 | 3min | 2 tasks | 5 files |
-| Phase 02 P03 | 2min | 2 tasks | 4 files |
-| Phase 03 P01 | 2min | 2 tasks | 7 files |
-| Phase 03 P02 | 2min | 2 tasks | 4 files |
-| Phase 03 P03 | 3min | 2 tasks | 4 files |
-| Phase 04 P01 | 5min | 2 tasks | 11 files |
-| Phase 04 P03 | 3min | 1 tasks | 2 files |
-| Phase 04 P02 | 4min | 1 tasks | 2 files |
-| Phase 05 P01 | 6min | 2 tasks | 43 files |
-| Phase 05 P02 | 3min | 2 tasks | 8 files |
-| Phase 05 P03 | 3min | 2 tasks | 6 files |
-| Phase 05 P04 | 4min | 2 tasks | 8 files |
-| Phase 06 P01 | 4min | 3 tasks | 14 files |
-| Phase 06 P02 | 2min | 2 tasks | 5 files |
-| Phase 07 P01 | 5min | 2 tasks | 10 files |
-| Phase 07 P03 | 2min | 2 tasks | 3 files |
-| Phase 07 P02 | 2min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -74,46 +57,13 @@ Last activity: 2026-03-22 — Milestone v1.1 started
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: 6-phase structure following data -> scraping -> API -> scheduling/alerts -> frontend -> polish dependency chain
-- [Roadmap]: Scraping engine validated via CLI before API exists (Phase 2 before Phase 3) to confront highest-risk component early
-- [01-01]: Python 3.10+ (lowered from 3.11 to match local environment)
-- [01-01]: Seeded app_settings default row in initial Alembic migration
-- [01-01]: Added setuptools package discovery config for flat layout
-- [01-02]: Added id desc tiebreaker to list ordering for SQLite second-precision timestamps
-- [01-03]: Used monkeypatch on settings singleton for alembic test isolation (env var insufficient after import)
-- [02-01]: JSON-LD extraction as shared _try_json_ld method on BaseExtractor for all retailers
-- [02-01]: Walmart uses __NEXT_DATA__ as primary extraction strategy before JSON-LD fallback
-- [02-01]: patchright selected (locked decision from context) with persistent context, headless=True, channel="chrome"
-- [Phase 02]: Tenacity reraise=True so callers see original ScrapeError, not wrapped RetryError
-- [Phase 02]: Added app.scrapers import in CLI script to trigger extractor auto-registration
-- [Phase 03]: Thin route handlers -- no session.commit() in endpoints; get_db dependency handles commit/rollback
-- [Phase 03]: Test DB override mirrors production get_db pattern (commit on success, rollback on error)
-- [Phase 03-02]: Diff-based URL replacement in PATCH to preserve scrape history for retained URLs
-- [Phase 03-02]: Re-fetch after flush + expire cached state to resolve SQLAlchemy async staleness with server-side onupdate
-- [Phase 03-03]: Lazy singleton BrowserManager initialized on first scrape request, not at app boot
-- [Phase 03-03]: Trigger endpoint queries second-latest result (excluding current) for correct delta computation
-- [Phase 03-03]: History endpoint marks oldest record as new directly rather than DB lookup
-- [Phase 04]: Re-breach detection uses offset(1) to skip current result when checking previous price
-- [Phase 04]: SSE broadcast stub with asyncio.Queue set ready for Plan 03 streaming
-- [Phase 04]: Scheduler sync: route handlers call add_scrape_job/remove_scrape_job after DB mutation
-- [Phase 04-03]: Used manual StreamingResponse over FastAPI EventSourceResponse for explicit SSE header control
-- [Phase 04]: Separated CRUD tests into test_alerts_crud.py to coexist with SSE tests
-- [Phase 04]: Used db.refresh() for eager-loading relationships after mark_alert_read mutation
-- [Phase 05]: Manual Vite scaffold + shadcn init (CLI interactive mode incompatible with automation)
-- [Phase 05]: Pause/resume uses PATCH /watch-queries/{id} with is_active body (not separate endpoints)
-- [Phase 05]: Fixed shadcn sonner component: removed next-themes dep and circular self-import
-- [Phase 05-02]: Exported isThresholdBreached as pure function for testability instead of testing full QueryCard with hook dependencies
-- [Phase 05-02]: Used underscore-prefixed state variables for Plan 03 placeholders to satisfy TypeScript noUnusedLocals
-- [Phase 05]: Omitted StatusDot import (Plan 02 not yet executed) - sheet shows threshold text only
-- [Phase 05]: Exported findLowestPriceUrlId from QuerySheet for direct unit testing
-- [Phase 05]: Scrape Now toast already handled in QueryCard; useAlertSSE in Layout for app-wide SSE
-- [Phase 06]: onViewHistory prop optional on ListingRow for backward compatibility
-- [Phase 06]: CSS color variables moved from @theme to @layer base with :root/:dark selectors for dual-theme support
-- [Phase 06]: ThemeProvider wraps at top level with attribute=class and defaultTheme=dark to preserve existing appearance
-- [Phase 07]: Cooldown check runs once before per-result loop to avoid partial alert sets
-- [Phase 07]: alert_type is 'pct_drop' only when pct fires and threshold does not; dual-fire defaults to 'threshold'
-- [Phase 07]: batch_alter_table used for SQLite-compatible column additions in migration
-- [Phase 07]: Used getattr for scheduler next_run_time to handle non-started scheduler in tests
+- [Roadmap v1.1]: 4-phase structure -- health -> wayback -> matching -> polish
+- [Roadmap v1.1]: Health first because scrape_attempts migration is time-sensitive (lost tracking data cannot be recovered)
+- [Roadmap v1.1]: Wayback second because zero schema changes, read-only computation on existing scrape_results
+- [Roadmap v1.1]: Fuzzy matching third because most complex, benefits from health data and accumulated scrape history
+- [Research]: rapidfuzz>=3.12.0 is the only new dependency for v1.1 (MIT license, C++ core)
+- [Research]: Success rate must be computed over last N attempts, not calendar windows
+- [Research]: Wayback comparisons need proximity window validation and minimum 3-point floor for averages
 
 ### Pending Todos
 
@@ -121,11 +71,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Research]: Retailer CSS selectors may be stale at implementation time -- validate against live pages during Phase 2
-- [Research]: playwright-stealth vs patchright selection needed before Phase 2 planning -- RESOLVED: patchright selected
+- [Research]: Fuzzy matching threshold (85 vs 90%) needs empirical validation against real scraped titles during Phase 10 planning
+- [Research]: scrape_attempts backfill decision -- derive from scrape_jobs or start fresh from migration date (decide during Phase 8 planning)
+- [Research]: Wayback proximity window should be 2x scrape interval -- check actual frequency distribution during Phase 9 planning
 
 ## Session Continuity
 
-Last session: 2026-03-22T22:28:08.670Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-03-22
+Stopped at: Roadmap created for v1.1 milestone (Phases 8-11)
 Resume file: None
