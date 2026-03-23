@@ -1,303 +1,250 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** Price scraping / price tracking web application
-**Researched:** 2026-03-18
+**Domain:** Adding scrape health monitoring, wayback price comparisons, and multi-product fuzzy matching to an existing price tracking scraper
+**Researched:** 2026-03-22
+**Confidence:** HIGH (pitfalls derived from existing codebase analysis + domain research)
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, data loss, or a fundamentally broken product.
+### Pitfall 1: No Structured Per-URL Failure Data to Build Health Metrics On
+
+**What goes wrong:**
+The existing system only creates a `ScrapeResult` row on success. Failures are buried in `ScrapeJob.error_message` as concatenated unstructured text (format: `"{url}: {error}\n"`). To compute per-URL health metrics, you need to know which URLs failed in which jobs. Parsing `error_message` strings with regex is fragile, lossy (no failure type classification), and will break silently when error message formats change. Yet this is the obvious shortcut developers reach for when asked to "add a health dashboard."
+
+**Why it happens:**
+The v1.0 design reasonably optimized for the happy path -- store results on success, concatenate errors for debugging. Per-URL failure tracking was not a requirement. When the health dashboard feature arrives, developers try to derive failure data from existing tables rather than adding proper schema support.
+
+**How to avoid:**
+1. Add a `scrape_attempt` table that records one row per `(scrape_job_id, retailer_url_id)` with columns: `status` (success/failed), `failure_type` (from existing `FailureType` enum: NETWORK_ERROR, EXTRACTION_ERROR, BLOCKED), `error_message`, `created_at`. Populate for both successes and failures.
+2. Update `run_scrape_job` in `scrape_service.py` to write an attempt row in both the `try` and `except` branches of the URL loop (lines 117-133 of current code).
+3. Do NOT parse `ScrapeJob.error_message` for per-URL failure data. It is unstructured, does not preserve failure types, and will rot.
+
+**Warning signs:**
+- Regex or string splitting on `error_message` appearing in health metric code
+- Failure counts that don't add up (partial_success jobs obscure per-URL outcomes)
+- Health metrics that miss failures from jobs where some URLs succeeded
+
+**Phase to address:**
+Scrape health dashboard phase -- this is a prerequisite schema migration that must happen first, before any health metric computation.
 
 ---
 
-### Pitfall 1: Retailer Anti-Bot Systems Will Block You on Day One
+### Pitfall 2: Computing Success Rate Over Calendar Windows Instead of Attempt Counts
 
-**What goes wrong:** You build the scraper against Amazon, Walmart, or Best Buy and it works in development with a handful of manual test runs. You deploy background scheduling and within hours you get CAPTCHAs, empty responses, IP blocks, or (Amazon's latest) AI-scored "human likelihood" rejection. As of 2026, a basic Python script against Amazon has roughly a 2% success rate without countermeasures. Amazon uses AWS WAF with real-time ML scoring. Walmart uses layered anti-bot analyzing IP, HTTP fingerprint, and JS environment. Cloudflare (used by many retailers) now deploys "AI Labyrinth" that feeds bots through infinite fake pages.
+**What goes wrong:**
+Success rate computed as `successful_scrapes / total_scrapes` over "the last 7 days" produces misleading numbers when scrape schedules vary. A URL scraped hourly has 168 data points in 7 days; a URL scraped daily has 7. Two failures out of 168 (98.8% success) and two failures out of 7 (71.4% success) represent the same reliability but look wildly different on the dashboard. Worse, a URL added 2 days ago that has failed twice shows "0% success over 7 days" -- technically true but misleading because the denominator is wrong.
 
-**Why it happens:** Developers build scraping logic against page structure and assume network access is the easy part. The opposite is true: parsing HTML is trivial; getting the HTML in the first place is the hard part.
+**Why it happens:**
+Calendar-window queries are the natural SQL pattern: `WHERE created_at >= now - interval '7 days'`. It feels correct. The schedule-variance problem is non-obvious until you see the dashboard showing wildly different rates for URLs with identical reliability.
 
-**Consequences:** The entire core value proposition ("automated price tracking") silently fails. Scrape jobs return empty/stale data. Users see no price updates and lose trust in the tool.
+**How to avoid:**
+1. Compute success rate as `successes / total_attempts` scoped to a fixed number of recent attempts (e.g., "last 20 scrapes for this URL") rather than a calendar window. This normalizes across schedules.
+2. Never show a percentage for URLs with fewer than 5 attempts. Show "2/3 successful" for small samples, not "66.7%."
+3. For the "last successful scrape" timestamp, query directly -- do not derive from success rate calculations.
+4. Show the denominator alongside the rate: "95% (19/20)" so the user can gauge confidence.
 
-**Prevention:**
-- Accept that major retailers (Amazon, Walmart) are extremely hostile to scrapers. Design the scraper architecture with anti-detection as a first-class concern, not a bolt-on.
-- Use `playwright-stealth` (or the newer `patchright` fork) from the start to mask automation fingerprints (`navigator.webdriver`, default user-agent, etc.).
-- Implement per-retailer configuration: user-agent rotation, request delays (randomized 3-15 seconds between actions), viewport randomization.
-- Create new browser contexts per scrape session and close them after. Never reuse a single long-lived context across scrapes.
-- Add human-like interaction patterns: random mouse movements, scroll-then-click, variable typing speed.
-- For Amazon specifically: consider scraping from Amazon product pages directly (not search results), which has lower detection rates. Alternatively, use the Amazon Product Advertising API if the volume is low enough.
-- Build a "scrape health" dashboard metric from day one: success rate per retailer per day. When it drops below 80%, alert.
+**Warning signs:**
+- URLs with different schedules showing incomparable metrics on the same dashboard view
+- URLs with 1-2 attempts showing alarming failure percentages
+- "partial_success" jobs being silently counted as full successes or full failures
 
-**Detection:** Scrape results returning null prices, HTML containing CAPTCHA elements, HTTP 403/429 responses, response bodies that are much smaller than expected.
-
-**Phase relevance:** Must be addressed in Phase 1 (core scraping). If you skip this, nothing else matters.
-
-**Confidence:** HIGH -- multiple authoritative sources confirm the severity. Amazon's 2% baseline success rate is widely reported.
-
----
-
-### Pitfall 2: Playwright Memory Leaks Kill the Long-Running FastAPI Process
-
-**What goes wrong:** Playwright browser contexts and pages accumulate memory over time. The FastAPI + APScheduler process runs continuously. After hours or days of scheduled scrapes, memory usage climbs to gigabytes and the process either OOM-crashes or becomes unresponsive. Reloading a page does not free the memory -- only closing the page and recreating it does. Internal HashMaps (Request/Response objects) in Playwright's connection layer are never cleared during a context's lifetime.
-
-**Why it happens:** Developers reuse browser instances or contexts across scrape jobs for "efficiency." Each scrape accumulates DOM nodes, cached resources, event listeners, and network response buffers in memory. Playwright was designed for test suites (short-lived), not for 24/7 scraping daemons.
-
-**Consequences:** The background service silently degrades and eventually crashes. Scheduled scrapes start failing. On a local machine without process monitoring, the user may not notice for days.
-
-**Prevention:**
-- Never reuse browser contexts across scrape jobs. Create a fresh context per scrape batch, do the work, close the context, close the browser. Every time.
-- Use `browser.new_context()` and `context.close()` in a try/finally block (or async context manager) so contexts are always cleaned up, even on exceptions.
-- Set a hard memory ceiling: monitor process RSS and restart the Playwright browser instance if it exceeds a threshold (e.g., 500MB).
-- Limit concurrency: don't open 20 pages simultaneously. Process URLs sequentially or in small batches (2-3 concurrent pages max).
-- Disable unnecessary resource loading: `context.route("**/*.{png,jpg,gif,svg,css,font,woff}", lambda route: route.abort())` to skip images/CSS/fonts that waste memory and bandwidth.
-
-**Detection:** Monotonically increasing memory usage over successive scrape cycles. Process RSS growing beyond 300-500MB.
-
-**Phase relevance:** Must be designed into the scraping service architecture in Phase 1. Retrofitting context lifecycle management is painful.
-
-**Confidence:** HIGH -- confirmed via multiple Playwright GitHub issues (#6319, #15400, #286) and community reports.
+**Phase to address:**
+Scrape health dashboard phase -- metric computation logic, after the schema migration.
 
 ---
 
-### Pitfall 3: APScheduler + FastAPI Lifecycle Mismanagement
+### Pitfall 3: Wayback "30 Days Ago" Showing a Price From a Completely Different Date
 
-**What goes wrong:** APScheduler's scheduler is initialized incorrectly relative to FastAPI's lifecycle. Common failure modes: (a) scheduler starts before the event loop is ready, (b) scheduler blocks the event loop and FastAPI stops responding to HTTP requests, (c) using `BackgroundScheduler` (thread-based) instead of `AsyncIOScheduler` creates thread-safety issues with async code, (d) if running with multiple Uvicorn workers, each worker spawns its own scheduler instance, causing duplicate scrape jobs.
+**What goes wrong:**
+The UI shows "30 days ago: $299" but there was no scrape exactly 30 days ago. The query grabs the nearest scrape -- which might be from 45 days ago or 18 days ago -- and labels it "30 days ago." The user makes purchase decisions based on a comparison that does not represent what it claims. This is especially bad for newly added URLs with sparse history.
 
-**Why it happens:** APScheduler and FastAPI have independent lifecycle models. FastAPI manages startup/shutdown via lifespan context managers. APScheduler needs to be explicitly started and stopped. Developers often start the scheduler at module import time or in a startup event without proper shutdown handling.
+**Why it happens:**
+Scrapes happen on irregular intervals: schedules vary, scrapes fail, URLs get paused and resumed. The `scrape_results.created_at` timestamps never land exactly N days in the past. The naive query `WHERE created_at <= now() - 30 days ORDER BY created_at DESC LIMIT 1` silently returns arbitrarily distant data. The existing history endpoint already deduplicates consecutive same-price records, which further thins the available comparison points.
 
-**Consequences:** Duplicate scrape jobs waste resources and may trigger anti-bot detection faster. Blocked event loops make the UI unresponsive. Improperly shut down schedulers leave orphaned browser processes.
+**How to avoid:**
+1. Always display the actual date of the comparison point, not just the label. Show "Feb 20 ($299)" not "30 days ago: $299."
+2. Define acceptable proximity windows: "30-day comparison" means the nearest scrape within +/- 3 days of the target date. If no scrape exists in that window, return null and show "No data" in the UI.
+3. For averages over periods, show the sample count: "90-day avg: $285 (12 scrapes)." Never compute an average with fewer than 3 data points -- show individual prices instead.
+4. Handle the "URL just added" case explicitly: if the URL has less than N days of history, don't show N-day comparisons at all. Show "Added X days ago" instead.
 
-**Prevention:**
-- Use `AsyncIOScheduler` (not `BackgroundScheduler`) so jobs run on the same event loop as FastAPI.
-- Initialize and start the scheduler inside FastAPI's `lifespan` async context manager. Shut it down in the teardown phase of the same lifespan.
-- Run Uvicorn with `--workers 1` for this application. Multiple workers means multiple schedulers. For a single-user local tool, one worker is correct.
-- Make all scheduled job functions `async def` so they cooperate with the event loop. Never run synchronous Playwright calls from an async scheduler job -- use `async_playwright`.
-- Add a file-lock guard as defense-in-depth against accidental multi-instance scheduling.
+**Warning signs:**
+- "30 days ago" label appearing for URLs added last week
+- Comparison showing data from 60+ days ago labeled as "30 days ago"
+- Averages based on 1-2 data points presented as reliable statistics
 
-**Detection:** Seeing the same scrape job execute multiple times at the same scheduled time (check logs). FastAPI endpoints becoming unresponsive during scrape cycles.
-
-**Phase relevance:** Phase 1/2 (scheduling infrastructure). Must be correct before building the full scrape schedule UI.
-
-**Confidence:** HIGH -- confirmed via APScheduler GitHub issues and FastAPI integration guides.
-
----
-
-### Pitfall 4: SQLite "Database Is Locked" Under Concurrent Access
-
-**What goes wrong:** The APScheduler job writes scrape results to SQLite at the same time the FastAPI endpoint reads data for the dashboard. SQLite uses database-level locking. With Python's default `pysqlite` driver, transactions are implicitly opened on the first write and held open longer than expected. Result: `sqlite3.OperationalError: database is locked` errors that crash scrape jobs or API responses.
-
-**Why it happens:** SQLite is single-writer. Python's `pysqlite` has a "clunky transaction state-machine" that silently holds write locks longer than necessary. Developers assume SQLite handles concurrency like PostgreSQL because reads work fine in isolation.
-
-**Consequences:** Scrape results are silently lost (write fails, no retry). Dashboard shows stale data or errors. In the worst case, data corruption if transactions are interrupted.
-
-**Prevention:**
-- Enable WAL (Write-Ahead Logging) mode immediately: `PRAGMA journal_mode=WAL;` This allows concurrent reads while a write is in progress. This is the single most impactful SQLite configuration for this use case.
-- Set a generous busy timeout: `PRAGMA busy_timeout=5000;` (5 seconds). This makes SQLite retry internally instead of immediately raising an error.
-- Keep write transactions as short as possible. Batch-insert scrape results in a single transaction, don't hold the transaction open while parsing HTML.
-- Use a single shared connection for writes (or a connection pool with max 1 writer). The async context makes this natural: all DB writes go through one async function that serializes access.
-- If using SQLAlchemy or an async ORM like `aiosqlite`, configure it to pass through the PRAGMA settings on each new connection via an event listener.
-
-**Detection:** Any `OperationalError: database is locked` in logs. Scrape results missing from the database despite the scraper reporting success.
-
-**Phase relevance:** Phase 1 (data layer setup). WAL mode and busy_timeout must be set when the database is first created.
-
-**Confidence:** HIGH -- well-documented SQLite limitation, confirmed by multiple sources including Charles Leifer's SQLite guides.
+**Phase to address:**
+Wayback price comparison phase -- data availability validation must be built before any comparison UI renders.
 
 ---
 
-### Pitfall 5: CSS Selectors Break Silently When Retailers Update Their Layouts
+### Pitfall 4: Fuzzy Matching False Positives From Retailer Title Noise
 
-**What goes wrong:** You write a CSS selector like `.a-price .a-offscreen` to extract the price from Amazon. Amazon A/B tests a new layout, changes a class name, or restructures the DOM. Your selector returns `None` instead of a price. The scraper logs "no price found," stores nothing, and moves on. No crash, no error -- just silent data loss. This happens routinely; major retailers update frontend code weekly.
+**What goes wrong:**
+Retailer product titles are packed with noise: "Sponsored", "Renewed", "2-Pack Bundle", "Used - Like New", "with Free Shipping", storage/color variants in the title, promotional badges. A `token_sort_ratio` of 87 between "Samsung Galaxy S24 Ultra 256GB" and "Samsung Galaxy S24 Ultra 256GB 2-Pack Silicone Case Bundle" looks like a match but represents a completely different product. Worse, the same retailer URL may return slightly different `product_name` values across scrapes (Amazon adds/removes "Best Seller" text), causing a URL to fail self-matching over time.
 
-**Why it happens:** CSS selectors encode a structural assumption about the page. Retailer frontends are built for users, not scrapers. Class names like `.s-price-col` are generated by build tools and change without notice.
+**Why it happens:**
+Developers test fuzzy matching with clean, manually typed product names rather than actual scraped titles. The `product_name` field in `ScrapeResult` stores whatever the retailer page returns, which varies wildly in format, length, and noise across retailers -- and even across scrapes of the same URL.
 
-**Consequences:** Price tracking silently stops working for affected retailers. The user sees stale "last scraped" timestamps but may not realize the scraper is failing until they miss a price drop they were watching.
+**How to avoid:**
+1. Normalize titles before comparison: lowercase, strip known noise tokens (Sponsored, Renewed, Bundle, Pack, Used, Refurbished, Certified, with [accessory]), collapse whitespace, remove non-alphanumeric except hyphens.
+2. Extract canonical product identifiers where possible -- model numbers via regex, ASIN from Amazon URLs -- and prefer exact identifier matching over fuzzy title matching.
+3. Use `rapidfuzz.fuzz.token_set_ratio` (not `token_sort_ratio` or `ratio`) because it handles extra/missing tokens gracefully.
+4. Set a conservative threshold (90+) and require user confirmation for matches in the 80-90 range. Store match confidence alongside groupings.
+5. Build a per-retailer noise token list from observing actual scraped titles.
 
-**Prevention:**
-- Implement a per-retailer scraper module pattern. Each retailer gets its own file with its own selectors and parsing logic. When a selector breaks, the fix is isolated.
-- Use multiple fallback selectors per price element. Try the primary selector, then a secondary, then a regex-based text extraction as last resort.
-- Prefer semantic selectors over structural ones: `[data-testid="price"]`, `[itemprop="price"]`, `meta[property="og:price:amount"]` are more stable than class-based selectors.
-- Use the `price-parser` library (by Scrapinghub/Zyte) to extract price amounts from raw text strings instead of writing custom regex. It handles 900+ real-world price format variations.
-- Build a "selector health check" that runs after each scrape: if a retailer returns 0 prices out of N expected results, flag it as broken in the UI and log a warning.
-- Store the raw HTML snapshot (or at least a relevant snippet) when a selector fails, so you can debug what changed without re-scraping.
+**Warning signs:**
+- Products from the same retailer matching each other (different storage tiers, color variants of the same phone)
+- Match count growing faster than the number of genuinely overlapping products
+- Users seeing obviously wrong groupings they cannot fix
 
-**Detection:** Sudden drop in successful price extractions for a specific retailer. "Last successful scrape" timestamp going stale.
-
-**Phase relevance:** Phase 1 (scraper architecture). The per-retailer module pattern and fallback strategy must be designed upfront.
-
-**Confidence:** HIGH -- universally acknowledged as the #1 ongoing maintenance cost for any web scraper.
-
----
-
-## Moderate Pitfalls
+**Phase to address:**
+Multi-product fuzzy matching phase. Title normalization must be built and tested with real scraped data before any matching logic runs.
 
 ---
 
-### Pitfall 6: Price Parsing Edge Cases Corrupt Your Data
+### Pitfall 5: Fuzzy Matching Degrades Quadratically and Blocks the Scrape Pipeline
 
-**What goes wrong:** Prices appear in wildly different formats: `$1,299.00`, `1.299,00 EUR`, `$12.99 - $24.99` (range), `From $599`, `was $999 now $749` (strikethrough), empty string (sold out), `Currently unavailable`, or just a bare number with no currency symbol. Naive regex like `r'\$[\d,.]+'` mishandles most of these.
+**What goes wrong:**
+Naive fuzzy matching compares every product title against every other -- O(n^2). With 50 tracked URLs this is 1,225 comparisons (fast). With 200 URLs it is 19,900 comparisons, and if matching against every historical title variant instead of just current titles, the input space grows with every scrape. Worse, if matching runs synchronously in the scrape completion path, it blocks the response and slows down the entire scrape cycle.
 
-**Why it happens:** Developers test with a handful of clean prices and miss the long tail of formatting variations, especially multi-price elements (original + sale), range prices, and stock-out states.
+**Why it happens:**
+Developers prototype with 10-20 URLs and matching completes in milliseconds. The quadratic growth is invisible at small scale. Additionally, the natural place to trigger matching is "after a scrape completes" -- which leads to synchronous execution in `run_scrape_job`.
 
-**Prevention:**
-- Use the `price-parser` library (`pip install price-parser`) as the primary parsing layer. It returns `Decimal` amounts and handles thousands/decimal separator ambiguity.
-- Treat "out of stock" / "currently unavailable" / "sold out" as a distinct scrape result status, not as a parsing failure. Store it as `status: OUT_OF_STOCK` with `price: null`.
-- When a page shows multiple prices (original + sale), extract both but store the lowest visible price as the "current price" and the higher one as "original price."
-- Store prices as integers in cents (e.g., `12999` for `$129.99`) to avoid floating-point precision issues. Parse to `Decimal` first, multiply by 100, store as integer.
-- Always store the raw extracted text alongside the parsed value so you can audit parsing correctness.
+**How to avoid:**
+1. Match against a canonical title per `retailer_url_id` (the most recent `product_name`), not every historical scrape result. The comparison space is `retailer_urls` count, not `scrape_results` count.
+2. Use blocking/bucketing: only compare products whose normalized titles share at least one significant token (brand name, model number). This reduces comparisons dramatically.
+3. Run matching asynchronously -- not in the scrape response path. Scrape completes, stores result, matching runs as a separate background task. User sees match results on next dashboard load.
+4. Use `rapidfuzz.process.cdist` for batch comparison -- it is implemented in C++ and dramatically faster than Python-level loops.
+5. Cache match results and only recompute when a new URL is added or a product name changes significantly.
 
-**Detection:** Prices that are 100x too high or too low (missed decimal separator). Price history charts showing impossible spikes.
+**Warning signs:**
+- Scrape completion time increasing as more URLs are tracked
+- Matching triggered on every scrape even when no product names changed
+- Matching running in the API request path
 
-**Phase relevance:** Phase 1 (scraping/parsing). The data model must accommodate null prices and status flags from the start.
-
-**Confidence:** HIGH -- well-documented, price-parser library specifically built to address this.
-
----
-
-### Pitfall 7: No Schema Migration Strategy Means Painful Database Changes
-
-**What goes wrong:** You create the SQLite tables with raw `CREATE TABLE` statements. Two weeks later, you need to add an `original_price` column, or change `price` from REAL to INTEGER (cents). You have no migration tool, so you either write ad-hoc `ALTER TABLE` scripts that may lose data, or you delete the database and lose all historical price data.
-
-**Why it happens:** For a "simple SQLite app," developers skip migration tooling as overkill. But the schema will change -- price tracking apps inevitably need new columns (currency, stock status, retailer metadata, alert configuration).
-
-**Prevention:**
-- Use Alembic (SQLAlchemy's migration tool) from day one, even for SQLite. The setup cost is 15 minutes. The cost of not having it is hours of manual migration scripting or data loss.
-- Define models with SQLAlchemy ORM (or SQLModel for FastAPI-native feel) rather than raw SQL. This gives you a single source of truth for the schema.
-- Design the initial schema with known future columns in mind: include `currency`, `status` (enum: OK/OUT_OF_STOCK/ERROR), `original_price`, `raw_text` from the start even if the UI doesn't use them yet.
-
-**Detection:** Needing to change the schema and realizing there's no migration path.
-
-**Phase relevance:** Phase 1 (data layer). Set up Alembic and initial migration before writing any application code.
-
-**Confidence:** MEDIUM -- based on common patterns in small Python projects. Not specific to scraping but highly relevant given the domain's evolving data needs.
+**Phase to address:**
+Multi-product fuzzy matching phase. The async architecture and bucketing strategy must be decided before writing matching logic.
 
 ---
 
-### Pitfall 8: Playwright Async/Sync Confusion in FastAPI Context
+### Pitfall 6: Stale or Slow Health Dashboard From Unbounded Aggregate Queries
 
-**What goes wrong:** Playwright offers both sync (`sync_playwright`) and async (`async_playwright`) APIs. Developers use the sync API because it's simpler, then discover it blocks the FastAPI event loop. The entire API becomes unresponsive during scrapes. Alternatively, they mix sync and async Playwright calls, creating deadlocks or "event loop already running" errors.
+**What goes wrong:**
+Health metrics require scanning `scrape_results` and `scrape_jobs` with aggregate queries (COUNT, GROUP BY, subqueries per URL). As scrape history grows to thousands of rows, these queries slow down. SQLite is single-writer, so heavy reads during a scrape can cause "database is locked" contention (the app already uses WAL mode, but long-running reads still block writes if they overlap with the WAL checkpoint). Developers add caching to fix this, but then the dashboard shows stale health data -- a URL that just recovered from failures still shows red.
 
-**Why it happens:** Playwright's sync API is more prominently documented and easier to get started with. The async API requires understanding `async with`, `await`, and proper context management.
+**Why it happens:**
+The natural first implementation computes all health metrics on each dashboard page load with fresh queries. It works fine with 100 rows. At 10,000 rows the dashboard takes multiple seconds. At 50,000 rows it is unusable.
 
-**Prevention:**
-- Use `async_playwright` exclusively. Never import from `playwright.sync_api` anywhere in the codebase.
-- All scraper functions must be `async def`. The APScheduler job handler, the on-demand scrape endpoint, and the retry logic must all be async.
-- If you must call a blocking library from async code, use `asyncio.to_thread()` -- but this should not be needed for Playwright's async API.
-- Add a linting rule or code review check: any import of `playwright.sync_api` is a bug.
+**How to avoid:**
+1. Denormalize the hottest metrics onto `RetailerUrl`: add `last_success_at`, `last_failure_at`, `consecutive_failures` columns. Update them atomically in `run_scrape_job` when outcomes are determined. Dashboard reads become simple column lookups.
+2. For success rate, precompute on scrape completion (increment counters) rather than computing on read.
+3. Ensure the composite index `(retailer_url_id, created_at DESC)` exists on `scrape_results` -- it already serves the history endpoint and will serve health queries.
+4. If you must run aggregate queries, scope them with LIMIT (last N attempts per URL) and never compute all URL health in a single unbounded query.
 
-**Detection:** FastAPI endpoints timing out or becoming unresponsive when a scrape is running. "Event loop is already running" errors.
+**Warning signs:**
+- Dashboard load time increasing over weeks/months
+- Health status lagging behind actual scrape outcomes by minutes
+- SQLite "database is locked" errors coinciding with dashboard loads during active scrapes
 
-**Phase relevance:** Phase 1. The wrong choice here requires rewriting every scraper function.
-
-**Confidence:** HIGH -- this is a well-known footgun in the Playwright + async Python ecosystem.
-
----
-
-### Pitfall 9: No Rate Limiting or Backoff Leads to IP Bans
-
-**What goes wrong:** A user creates 50 watch queries across 3 retailers. The scheduler fires all of them simultaneously. The scraper opens 50 browser pages and hits Walmart 20 times in 10 seconds. Walmart blocks the IP. Now all Walmart scrapes fail until the ban expires (hours or days).
-
-**Why it happens:** Developers build the scheduler to fire all jobs at the configured interval without considering aggregate request volume across all watch queries targeting the same retailer.
-
-**Consequences:** Temporary or permanent IP bans from retailers. All watch queries for that retailer fail. On a home IP without rotation, recovery may require waiting 24+ hours.
-
-**Prevention:**
-- Implement a per-retailer request queue with configurable rate limits (e.g., max 1 request per 10 seconds per retailer).
-- Never scrape the same retailer in parallel. Serialize requests to each retailer with randomized delays (5-15 seconds between requests).
-- Stagger scheduled scrape jobs: don't run all 50 watch queries at exactly 06:00. Add jitter: `scheduled_time + random(0, 300)` seconds.
-- Implement exponential backoff on HTTP errors: if a retailer returns 429 or 403, wait 1min, then 5min, then 30min before retrying.
-- Store the last request timestamp per retailer and enforce minimum intervals at the scraper layer, independent of scheduling.
-
-**Detection:** Sudden spike in failed scrapes for a single retailer. HTTP 429 or CAPTCHA responses.
-
-**Phase relevance:** Phase 1-2 (scraping infrastructure and scheduling).
-
-**Confidence:** HIGH -- standard scraping operational knowledge.
+**Phase to address:**
+Scrape health dashboard phase. Denormalized columns should be added in the same schema migration as the `scrape_attempt` table.
 
 ---
 
-## Minor Pitfalls
+## Technical Debt Patterns
 
----
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Parse `ScrapeJob.error_message` for per-URL failures | No schema change needed | Fragile regex, breaks on format changes, loses failure type info | Never -- add a `scrape_attempt` table |
+| Compute health metrics with aggregate queries on every page load | Simple to implement | Slow dashboard as data grows, SQLite lock contention | Only with <200 total scrape results; migrate to denormalized columns before that |
+| Store fuzzy match results only in memory | Fast prototyping | Lost on restart, recomputed wastefully | Only during initial development iteration |
+| Use a single global fuzzy threshold for all retailers | Simpler config | Amazon titles need different thresholds than Best Buy titles (different noise levels) | Acceptable for MVP if threshold is conservative (90+) |
+| Run matching synchronously in scrape pipeline | See matches immediately after scrape | Blocks scrape completion, scales poorly | Never in production; acceptable in a throwaway prototype |
+| Show "30 days ago" without date validation | Simple to build | Misleading comparisons, user trust erosion | Never -- always validate proximity window |
 
-### Pitfall 10: Frontend Polling Overload on Dashboard
+## Integration Gotchas
 
-**What goes wrong:** The React dashboard polls the FastAPI backend every 2 seconds for "latest prices." With many watch queries, this creates unnecessary load and SQLite read contention. On slower machines, the UI feels sluggish.
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| SQLite + health aggregate queries | No composite index on `(retailer_url_id, created_at)` | Add index in migration; denormalize hot metrics to `RetailerUrl` columns |
+| RapidFuzz + scraped titles | Comparing raw titles with `fuzz.ratio()` | Normalize titles first (strip noise tokens, lowercase), use `token_set_ratio`, high threshold |
+| APScheduler + matching jobs | Running matching synchronously in scrape callback | Fire a separate lightweight background task for matching after scrape completes |
+| Wayback queries + timestamps | Using `datetime.now()` (local time) for "N days ago" arithmetic | Use UTC everywhere; `ScrapeResult.created_at` uses SQLite `func.now()` (UTC) -- all comparisons must use UTC |
+| Price averages + integer cents | Computing average with Python float division then rounding imprecisely | Compute `SUM(price_cents) / COUNT(*)` in SQL or use Python `statistics.mean` on integers; display conversion to dollars happens only at the API response boundary |
+| Alembic migration + denormalized columns | Adding columns without backfilling existing data | Migration must both add columns and run a data migration to populate them from existing `scrape_jobs`/`scrape_results` |
 
-**Prevention:**
-- Use a longer poll interval (30-60 seconds) for the dashboard. Prices don't change between scrapes anyway.
-- Better: use Server-Sent Events (SSE) from FastAPI to push updates only when a scrape completes. This eliminates polling entirely.
-- Cache the dashboard summary response in memory (e.g., with a simple dict + timestamp) and invalidate only when new scrape results arrive.
+## Performance Traps
 
-**Detection:** High CPU usage from the FastAPI process even when no scrapes are running.
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Full table scan for "last N scrapes per URL" | Health dashboard takes >1s | Index on `(retailer_url_id, created_at DESC)` + LIMIT | >10K scrape_results rows |
+| O(n^2) fuzzy matching on all titles | Matching takes >5s | Bucketing by shared tokens, batch with `cdist` | >200 retailer URLs |
+| Recomputing all wayback stats on page load | Detail page takes >2s to render | Cache wayback stats per URL, invalidate only on new scrape for that URL | >1K scrape_results per URL |
+| Unindexed GROUP BY on scrape_jobs for health | Health endpoint timeout | Index on `(watch_query_id, status)`, or denormalize to `RetailerUrl` | >5K scrape_jobs |
+| Loading all scrape_results into Python for averages | Memory spike, GC pauses | Use SQL aggregates (AVG, COUNT) with WHERE clauses, never SELECT * into Python | >50K rows |
+| Matching against all historical titles instead of current canonical | Comparison space grows with every scrape | Use only the latest `product_name` per `retailer_url_id` as canonical | Always wrong -- grows linearly with scrape count |
 
-**Phase relevance:** Phase 3 (frontend/dashboard optimization).
+## UX Pitfalls
 
----
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Showing "0% success rate" for a URL that hasn't been scraped yet | User thinks URL is broken immediately after adding it | Show "Not yet scraped" for URLs with zero attempts; require minimum 5 attempts before showing percentage |
+| Showing "30 days ago: N/A" without explanation | User confused about why there is no comparison data | Show "Added X days ago -- need more history for 30-day comparison" with actual data availability |
+| Auto-grouping products without user confirmation | User sees wrong matches, loses trust, can't fix them | Show suggested matches with confidence scores; let user confirm or dismiss; persist overrides |
+| Red/green only color coding for health status | Color-blind users can't distinguish; threshold is arbitrary | Always show the number alongside the color indicator; let user configure what counts as "unhealthy" |
+| Displaying "average price: $285" without sample count | User makes purchase decisions on an average computed from 2 data points | Always show sample count: "Avg: $285 (12 scrapes)" -- and refuse to show averages under 3 data points |
+| Health dashboard showing all URLs equally | Paused URLs clutter the view with stale "last scraped" timestamps | Separate active vs paused URLs; show "Paused" badge; don't flag paused URLs as unhealthy |
+| Consecutive failure count without "since when" context | User sees "5 consecutive failures" but does not know if they happened over 5 hours or 5 weeks | Show "5 failures since [date]" or a timeline, not just the count |
 
-### Pitfall 11: Not Handling Retailer-Specific Page Variants
+## "Looks Done But Isn't" Checklist
 
-**What goes wrong:** Amazon shows different page layouts for: product pages, search results, "Currently unavailable" pages, "Subscribe & Save" pricing, marketplace vs. Amazon-sold items, and regional variants. A single selector strategy per retailer is insufficient.
+- [ ] **Health dashboard:** Shows success rate but does not handle URLs with zero scrape attempts -- verify "no data" state renders distinctly from "0% success"
+- [ ] **Health dashboard:** Consecutive failure counter resets on success but does not handle edge case of manually re-enabling a paused query -- verify counter behavior on state transitions
+- [ ] **Health dashboard:** "Last successful scrape" timestamp is shown but timezone is not labeled -- verify it displays in user's local time, not raw UTC from SQLite
+- [ ] **Health dashboard:** Shows per-URL health but partial_success jobs are handled -- verify a job where 3/4 URLs succeed correctly marks 1 URL as failed and 3 as succeeded
+- [ ] **Wayback comparison:** Shows "30-day price" but validates proximity -- verify it returns null (not stale data) when no scrape exists within +/- 3 days of target
+- [ ] **Wayback comparison:** Computes averages but handles uniform prices -- verify it displays "$299 (stable)" not "average: $299" when all scrapes in window have the same price
+- [ ] **Wayback comparison:** Works for active URLs but handles deleted URLs -- verify historical comparisons still work after a retailer URL is removed from a watch query
+- [ ] **Fuzzy matching:** Matches products but persists groupings -- verify match groups survive server restart (stored in DB, not just memory)
+- [ ] **Fuzzy matching:** Threshold is set but tested against real titles -- verify with actual scraped titles from Amazon, Best Buy, Walmart, Newegg, and Micro Center (these are the existing extractors)
+- [ ] **Fuzzy matching:** User can reject a false match -- verify dismissed matches are persisted and not re-suggested on next matching run
+- [ ] **Fuzzy matching:** Handles Unicode in product titles -- verify normalization works with accented characters, em-dashes, and special symbols retailers inject
 
-**Prevention:**
-- Build retailer scrapers to detect the page type first (product page vs. search vs. out-of-stock), then apply the appropriate parsing strategy.
-- Implement a page classification step before price extraction: check for known indicators ("Currently unavailable", "Add to Wish List" without price, etc.).
-- Test each retailer scraper against at least 5 different product types (in-stock, out-of-stock, marketplace, sale price, subscription price).
+## Recovery Strategies
 
-**Detection:** Inconsistent parse results across different products on the same retailer.
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Health metrics built on parsed error strings | MEDIUM | Create `scrape_attempt` table; backfill from `scrape_jobs` + `scrape_results` (derive failures from jobs where a URL has no result row); migrate queries |
+| Wrong fuzzy matches already shown to user | LOW | Add "unmatch" action to UI; store user overrides in DB; rerun matching excluding overridden pairs |
+| Misleading wayback comparisons shipped | LOW | Add actual-date and sample-count to API response; update frontend to display them; no data migration needed |
+| Stale cached health metrics causing confusion | LOW | Drop cache; add denormalized columns to `RetailerUrl`; backfill from existing scrape data; dashboard reads new columns |
+| O(n^2) matching blocking scrape pipeline | MEDIUM | Extract matching into async background task; refactor `run_scrape_job` to not call matching; existing match data is preserved |
+| Success rates computed over calendar windows showing misleading numbers | LOW | Change queries to "last N attempts" pattern; no schema change needed, just query logic update |
 
-**Phase relevance:** Phase 2 (retailer scraper hardening).
+## Pitfall-to-Phase Mapping
 
----
-
-### Pitfall 12: Storing Absolute URLs That Expire or Change
-
-**What goes wrong:** You store the full URL scraped from a search result. The URL contains session tokens, tracking parameters, or temporary redirect paths. A week later, the stored URL returns a 404 or redirects to the homepage.
-
-**Prevention:**
-- Canonicalize URLs before storage: strip tracking parameters (`utm_*`, `ref`, `tag`, session IDs).
-- For Amazon, extract and store the ASIN; reconstruct the URL as `https://amazon.com/dp/{ASIN}`. For Walmart, store the product ID. Canonical identifiers are more stable than full URLs.
-- Validate stored URLs periodically by checking for redirects/404s during scrape cycles.
-
-**Detection:** Stored URLs returning 404 or redirecting to non-product pages.
-
-**Phase relevance:** Phase 1 (data model design).
-
----
-
-## Phase-Specific Warnings
-
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Core scraping engine | Anti-bot detection blocks all scrapes (Pitfall 1) | Stealth mode, delays, per-retailer config from day one |
-| Core scraping engine | Memory leaks crash long-running process (Pitfall 2) | Fresh browser context per job, resource blocking, context cleanup in finally blocks |
-| Data layer setup | SQLite locked errors (Pitfall 4) | WAL mode + busy_timeout on first connection |
-| Data layer setup | No migration path (Pitfall 7) | Alembic + SQLAlchemy from day one |
-| Scheduling | APScheduler lifecycle bugs (Pitfall 3) | AsyncIOScheduler in FastAPI lifespan, single worker |
-| Scheduling | Rate limiting / IP bans (Pitfall 9) | Per-retailer queue with enforced delays and jitter |
-| Price parsing | Silent data corruption (Pitfall 6) | price-parser library, store raw text, integer cents |
-| Selector maintenance | Silent scraper breakage (Pitfall 5) | Fallback selectors, health checks, per-retailer modules |
-| Frontend dashboard | Polling overhead (Pitfall 10) | SSE or long poll intervals, response caching |
-| Retailer coverage | Page variant handling (Pitfall 11) | Page type detection before parsing, multi-variant test cases |
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| No structured per-URL failure data | Health dashboard (schema migration) | `scrape_attempt` table exists; rows created for both success and failure in `run_scrape_job` |
+| Calendar window success rates | Health dashboard (metric computation) | Success rate uses "last N attempts" not calendar window; unit test with URLs on different schedules shows comparable rates |
+| Stale/slow aggregate queries | Health dashboard (denormalization) | `RetailerUrl` has `consecutive_failures`, `last_success_at`; dashboard API responds in <200ms with 10K+ scrape results |
+| Sparse data wayback comparisons | Wayback comparison (data availability) | API returns actual comparison date + sample count; null returned when proximity window is empty |
+| Misleading averages from few points | Wayback comparison (statistics display) | Averages require minimum 3 data points; sample count always in API response |
+| False positives from title noise | Fuzzy matching (normalization) | Title normalizer strips noise tokens; test suite uses real scraped titles from each of the 5 supported retailers |
+| Quadratic matching performance | Fuzzy matching (architecture) | Matching runs async via background task; uses token bucketing; benchmark shows 500 URLs matched under 1 second |
+| No user control over match results | Fuzzy matching (UX) | Matches shown as suggestions with confidence; confirm/dismiss persisted; dismissed pairs excluded from future runs |
 
 ## Sources
 
-- [Avoid Bot Detection With Playwright Stealth - Scrapeless](https://www.scrapeless.com/en/blog/avoid-bot-detection-with-playwright-stealth)
-- [How to Avoid Bot Detection with Playwright - ZenRows](https://www.zenrows.com/blog/avoid-playwright-bot-detection)
-- [Playwright Crawling Complete Guide 2026 - HashScraper](https://blog.hashscraper.com/posts/playwright-crawling-complete-guide-2026-from-installation-to-anti-bot-bypass-1?locale=en)
-- [The 2026 Amazon Scraping Wars - Medium](https://medium.com/@pangolin.spg/the-2026-amazon-scraping-wars-a-technical-deep-dive-into-anti-bot-combat-b77503fe2418)
-- [Does Amazon Allow Web Scraping? - DataPrixa](https://dataprixa.com/does-amazon-allow-web-scraping/)
-- [How to Scrape Walmart in 2026 - Oxylabs](https://oxylabs.io/blog/how-to-scrape-walmart-data)
-- [Playwright Memory Issue #6319 - GitHub](https://github.com/microsoft/playwright/issues/6319)
-- [Playwright Memory Issue #15400 - GitHub](https://github.com/microsoft/playwright/issues/15400)
-- [Playwright Python Memory Leak #286 - GitHub](https://github.com/microsoft/playwright-python/issues/286)
-- [Memory Management Best Practices - WebScraping.AI](https://webscraping.ai/faq/playwright/what-are-the-memory-management-best-practices-when-running-long-playwright-sessions)
-- [Schedule Tasks with FastAPI - Sentry](https://sentry.io/answers/schedule-tasks-with-fastapi/)
-- [APScheduler FastAPI Integration - ByteGoblin](https://bytegoblin.io/blog/implementing-background-job-scheduling-in-fastapi-with-apscheduler.mdx)
-- [SQLAlchemyJobStore Issue #499 - APScheduler GitHub](https://github.com/agronholm/apscheduler/issues/499)
-- [Abusing SQLite to Handle Concurrency - SkyPilot](https://blog.skypilot.co/abusing-sqlite-to-handle-concurrency/)
-- [Multi-threaded SQLite without OperationalErrors - Charles Leifer](https://charlesleifer.com/blog/multi-threaded-sqlite-without-the-operationalerrors/)
-- [Concurrent Writing with SQLite3 in Python - PythonTutorials](https://www.pythontutorials.net/blog/concurrent-writing-with-sqlite3/)
-- [price-parser - PyPI](https://pypi.org/project/price-parser/)
-- [Price-Parser Python Guide - Piloterr](https://www.piloterr.com/blog/price-parser-python-guide-web-scraping)
-- [Why XPath CSS Selectors Break Scrapers - ExtractData](https://extractdata.substack.com/p/why-xpath-css-selectors-break-scrapers)
-- [Why Your Web Scraper Keeps Breaking - BinaryBits](https://binarybits.co/blog/why-web-scraper-keeps-breaking)
-- [Price Scraping Guide 2026 - ProxyScrape](https://proxyscrape.com/blog/scraping-prices-from-websites)
+- Codebase analysis: `backend/app/models/scrape_result.py`, `scrape_job.py`, `retailer_url.py`, `services/scrape_service.py`, `api/scrapes.py`, `scrapers/base.py`
+- [RapidFuzz documentation](https://rapidfuzz.github.io/RapidFuzz/) -- token_set_ratio, cdist batch operations
+- [Fuzzy Matching 101 -- Data Ladder](https://dataladder.com/fuzzy-matching-101/) -- false positive patterns, threshold selection pitfalls
+- [Jaro-Winkler vs Levenshtein -- Flagright](https://www.flagright.com/post/jaro-winkler-vs-levenshtein-choosing-the-right-algorithm-for-aml-screening) -- algorithm tradeoffs for name matching
+- [SQLite performance tuning -- phiresky](https://phiresky.github.io/blog/2020/sqlite-performance-tuning/) -- indexing strategies, aggregate query optimization
+- [SQLite aggregates -- High Performance SQLite](https://highperformancesqlite.com/watch/aggregates) -- GROUP BY performance, window functions
+- [Sparse/intermittent time series -- Nixtla](https://nixtlaverse.nixtla.io/statsforecast/docs/tutorials/intermittentdata.html) -- challenges with sparse observation data
+- [Rolling average pitfalls -- FasterCapital](https://fastercapital.com/content/Rolling-Average--Understanding-the-Rolling-Average-for-Time-Series-in-Excel.html) -- window size selection, sparse data biases
+
+---
+*Pitfalls research for: Price Tracker v1.1 -- Scrape Health, Wayback Prices, Fuzzy Matching*
+*Researched: 2026-03-22*

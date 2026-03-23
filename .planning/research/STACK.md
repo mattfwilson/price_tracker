@@ -1,268 +1,237 @@
-# Technology Stack
+# Stack Research
 
-**Project:** Price Scraper
-**Researched:** 2026-03-18
-**Overall Confidence:** HIGH
+**Domain:** Price tracker v1.1 -- scrape health monitoring, wayback price comparisons, multi-product fuzzy matching
+**Researched:** 2026-03-22
+**Confidence:** HIGH
 
-## Recommended Stack
+## Existing Stack (validated in v1.0 -- DO NOT change)
 
-### Backend Core
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| FastAPI | >=0.135.0 | Backend API |
+| SQLAlchemy (async) | >=2.0.48 | ORM + async SQLite |
+| aiosqlite | >=0.22.0 | Async SQLite driver |
+| Alembic | >=1.18.0 | Database migrations |
+| Patchright (Playwright fork) | >=1.48.0 | Headless browser scraping |
+| APScheduler 3.x | >=3.11.0 | Background job scheduling |
+| Tenacity | >=9.0.0 | Retry logic |
+| httpx | >=0.28.0 | Async HTTP client |
+| React 19 + Vite 8 | latest | Frontend framework + build |
+| TanStack Query 5 | >=5.91.2 | Data fetching/caching |
+| Recharts 3 | >=3.8.0 | Charts |
+| shadcn/ui + Tailwind 4 | latest | UI components |
+| Zod 4 | >=4.3.6 | Schema validation |
+| Lucide React | >=0.577.0 | Icons |
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Python | 3.12+ | Runtime | Stable, full async support, best typing ergonomics. 3.13 is fine too but 3.12 is the safe floor. | HIGH |
-| FastAPI | 0.135+ | Web framework | Async-native, built-in SSE support (new `fastapi.sse` module), Pydantic v2 integration, excellent DX. The dominant Python API framework. | HIGH |
-| Pydantic | 2.12+ | Data validation/serialization | Required by FastAPI. V2 is 5-50x faster than v1. Use `BaseModel` for all request/response schemas. | HIGH |
-| Uvicorn | 0.34+ | ASGI server | Standard FastAPI deployment server. Use `--reload` in dev. | HIGH |
+## Recommended Stack Additions
 
-### Database & ORM
+### Backend -- One New Dependency
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| SQLite | (system) | Database | Zero-config, file-based, perfect for single-user local app. No server process needed. | HIGH |
-| SQLAlchemy | 2.0.48+ | ORM | The Python ORM standard. 2.0-style uses explicit `select()` statements -- more predictable than the legacy implicit query API. Full async support via `AsyncSession`. | HIGH |
-| aiosqlite | 0.22+ | Async SQLite driver | Required bridge for SQLAlchemy async + SQLite. SQLAlchemy's async engine uses this under the hood with `sqlite+aiosqlite://` connection string. | HIGH |
-| Alembic | 1.18+ | Database migrations | The only serious migration tool for SQLAlchemy. Run `alembic init` early; autogenerate migrations from model changes. Even for SQLite -- schema will evolve. | HIGH |
+| Library | Version | Purpose | Why Recommended |
+|---------|---------|---------|-----------------|
+| rapidfuzz | >=3.12.0 | Fuzzy string matching for product title deduplication | MIT license (thefuzz is GPL -- non-starter). C++ core makes it 16x faster than thefuzz. Provides `token_sort_ratio` and `token_set_ratio` scorers ideal for product names where word order and extra words vary across retailers. `process.cdist` computes NxN similarity matrices efficiently for batch matching. Zero transitive runtime dependencies. The standard production choice for Python fuzzy matching. |
 
-### Scraping
+**This is the only new pip dependency needed for all three features.**
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Playwright | 1.58+ | Headless browser automation | Retailers (Amazon, Walmart, BestBuy) render prices via JavaScript. Static HTTP scraping will not work. Playwright's async Python API (`async_playwright`) integrates cleanly with FastAPI's async loop. Auto-waits for elements, handles anti-bot JS better than alternatives. | HIGH |
+### Backend -- Features Using Existing Stack Only
 
-### Scheduling
+| Feature | Implementation Approach | Why No New Library |
+|---------|------------------------|-------------------|
+| Scrape health dashboard | SQLAlchemy aggregate queries on existing `scrape_jobs` table | ScrapeJob already tracks `status`, `error_message`, `started_at`, `completed_at`. Health metrics (success rate, consecutive failures, last success) are pure SQL aggregations. No new library needed. |
+| Wayback price comparisons | Date-windowed SQLAlchemy queries on existing `scrape_results` table | The repository already has `get_rolling_avg_price()` with a `window_days` parameter. Wayback stats ("30 days ago: $X", "90 days ago: $Y") are additional date-filtered queries on `price_cents` + `created_at`. Same pattern, different windows. |
+| Product match group storage | New Alembic migration + SQLAlchemy models | Match groups are relational data (group -> members). Standard SQLAlchemy models and foreign keys. |
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| APScheduler | 3.11+ | Background job scheduling | Embedded in-process scheduler -- no Redis, no Celery, no external broker. Use `AsyncIOScheduler` to run on the same event loop as FastAPI. **Use v3.x, not v4.x** -- v4 is still pre-release/unstable as of March 2026. | HIGH |
+### Frontend -- No New npm Dependencies Needed
 
-### Real-Time Notifications
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| FastAPI SSE (built-in) | (included in FastAPI 0.135+) | Server-to-client push | FastAPI now has native SSE via `fastapi.sse.EventSourceResponse` and `ServerSentEvent`. No need for the `sse-starlette` third-party package. SSE is simpler than WebSockets for this use case: notifications are server-to-client only (unidirectional). | HIGH |
-
-### Frontend Core
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| React | 19.2+ | UI framework | Stable, massive ecosystem, project requirement. | HIGH |
-| TypeScript | 5.7+ | Type safety | Catches bugs at build time. Use strict mode. Non-negotiable for any project beyond a toy. | HIGH |
-| Vite | 8.0+ | Build tool/dev server | 5x faster than webpack, native ESM, instant HMR. The standard React build tool in 2026 (Create React App is dead). Use `@vitejs/plugin-react` v6 (now uses Oxc instead of Babel -- faster builds). | HIGH |
-| TanStack Query | 5.90+ | Server state management | Handles data fetching, caching, refetching, loading/error states. Eliminates manual `useEffect` + `useState` fetch patterns. The standard for server-state in React. | HIGH |
-
-### Frontend UI & Styling
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Tailwind CSS | 4.2+ | Utility-first CSS | v4 rewrote the engine -- 5x faster, CSS-native config (no `tailwind.config.js`). Reduces CSS decision fatigue. | HIGH |
-| Recharts | 3.8+ | Price history charts | React-native, declarative, built on D3. `LineChart` component maps directly to the price-over-time visualization requirement. Simpler API than Chart.js/react-chartjs-2. | MEDIUM |
-| Lucide React | latest | Icons | Clean, tree-shakeable icon set. Better maintained than react-icons (which bundles everything). | MEDIUM |
-
-### Dev Tooling
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Ruff | latest | Python linting + formatting | Replaces both flake8 and black. Written in Rust, 10-100x faster. Single tool for lint + format. | HIGH |
-| pytest | 8+ | Python testing | Standard. Use `pytest-asyncio` for async test functions. | HIGH |
-| httpx | 0.28+ | HTTP test client | FastAPI's recommended test client (`from httpx import AsyncClient`). Async-native unlike `requests`. | HIGH |
-
-## Key Integration Patterns
-
-### FastAPI + APScheduler Lifecycle
-
-```python
-from contextlib import asynccontextmanager
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-scheduler = AsyncIOScheduler()
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    scheduler.start()
-    yield
-    scheduler.shutdown()
-
-app = FastAPI(lifespan=lifespan)
-```
-
-Use FastAPI's `lifespan` context manager (not deprecated `on_event`). The scheduler shares the asyncio event loop with FastAPI.
-
-### SQLAlchemy Async Session with FastAPI
-
-```python
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-
-engine = create_async_engine("sqlite+aiosqlite:///./prices.db")
-async_session = async_sessionmaker(engine, expire_on_commit=False)
-
-async def get_db():
-    async with async_session() as session:
-        yield session
-```
-
-Use FastAPI's `Depends(get_db)` for dependency injection. `expire_on_commit=False` prevents lazy-load issues after commit in async context.
-
-### Playwright Async Usage
-
-```python
-from playwright.async_api import async_playwright
-
-async def scrape_price(url: str) -> dict:
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await page.goto(url, wait_until="domcontentloaded")
-        # Extract price with page.locator() or page.eval_on_selector()
-        await browser.close()
-```
-
-**Performance note:** Launching a browser per scrape is expensive. For production, maintain a persistent browser instance and create new pages (tabs) per scrape. Close pages after each scrape to prevent memory leaks.
-
-### SSE for Notifications (FastAPI Native)
-
-```python
-from fastapi.sse import EventSourceResponse, ServerSentEvent
-
-@app.get("/notifications/stream")
-async def notification_stream():
-    async def event_generator():
-        while True:
-            # Check for new alerts (from DB or in-memory queue)
-            notification = await get_next_notification()
-            if notification:
-                yield ServerSentEvent(data=notification.json(), event="price_alert")
-            await asyncio.sleep(1)
-    return EventSourceResponse(event_generator())
-```
-
-On the React side, use the native `EventSource` API or a lightweight wrapper.
-
-## Alternatives Considered
-
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| ORM | SQLAlchemy 2.0 | Tortoise ORM | Tortoise is async-first but smaller ecosystem, less mature migrations (Aerich vs Alembic), fewer resources/examples. SQLAlchemy is the industry standard. |
-| ORM | SQLAlchemy 2.0 | Raw SQL / aiosqlite directly | Loses migration tooling, schema validation, and relationship management. Not worth the "simplicity" trade-off. |
-| Scheduler | APScheduler 3.x | APScheduler 4.x | v4 is still not production-ready (March 2026). The API changed significantly and the `fastapi-apscheduler4` wrapper explicitly warns against production use. Stick with 3.x. |
-| Scheduler | APScheduler 3.x | Celery + Redis | Massive overkill for a single-user local app. Requires Redis broker, separate worker process. APScheduler embeds in the FastAPI process. |
-| Notifications | SSE | WebSockets | WebSockets are bidirectional -- unnecessary complexity for server-to-client-only notifications. SSE auto-reconnects, works over standard HTTP, and FastAPI now has native support. |
-| Notifications | SSE | Polling | Wastes resources. SSE is a persistent connection with instant push. Polling adds latency and unnecessary DB queries. |
-| Charts | Recharts | Chart.js (react-chartjs-2) | Chart.js uses canvas (not SVG), harder to customize with React patterns. Recharts is declarative and React-native. |
-| Charts | Recharts | Nivo | Nivo is more powerful but heavier. Recharts is simpler for line charts, which is the primary use case here. |
-| Build tool | Vite | webpack | webpack is slower, more complex config, legacy. Vite is the standard in 2026. |
-| CSS | Tailwind 4 | CSS Modules / styled-components | Tailwind is faster to develop with for dashboard UIs. styled-components has runtime cost. CSS Modules are fine but slower developer velocity. |
-| State mgmt | TanStack Query | Redux / Zustand | This app's state is almost entirely server-derived (prices, alerts, watch queries). TanStack Query is purpose-built for this. Redux/Zustand are for complex client-side state, which this app has very little of. |
-| Formatting | Ruff | Black + flake8 + isort | Ruff replaces all three in a single, faster tool. No reason to use the old trio anymore. |
-
-## What NOT to Use
-
-| Technology | Why Not |
-|------------|---------|
-| APScheduler 4.x | Not production-ready. API unstable, core lib still in pre-release. |
-| `sse-starlette` | FastAPI 0.135+ has built-in SSE. No need for the third-party package anymore. |
-| `requests` library | Synchronous. Will block the FastAPI event loop. Use `httpx` if you need an HTTP client. |
-| Create React App | Deprecated, unmaintained. Use Vite. |
-| Flask | No async support without hacks. FastAPI is strictly better for this use case. |
-| BeautifulSoup / Scrapy | These are for static HTML scraping. Retailers render prices with JavaScript; only a headless browser (Playwright) works. |
-| `fastapi.on_event("startup")` | Deprecated. Use the `lifespan` context manager pattern instead. |
-| SQLAlchemy 1.x query API | The `session.query(Model)` style is legacy. Use `select(Model)` statements (2.0 style). |
+| Feature | Implementation Approach | Why No New Library |
+|---------|------------------------|-------------------|
+| Health dashboard table | shadcn `<Table>` component (already installed at `frontend/src/components/ui/table.tsx`) | Simple sortable table for per-URL health stats. For a personal tool with 10-50 tracked URLs, manual sort state is sufficient. TanStack Table would be overkill. |
+| Health status indicators | Existing `<Badge>` + `lucide-react` icons + existing `StatusDot` component | Color-coded indicators for health status. The project already has a StatusDot component and Badge primitives. |
+| Wayback price display | Inline text in existing detail views | "30 days ago: $X" is text annotation, not a chart. Render using existing `format.ts` price formatting utilities. |
+| Product match groups | Existing `<Card>` + `<Table>` components | Grouped cards showing cross-retailer comparisons. No new component primitives needed. |
+| Health trend sparklines (stretch) | Recharts mini `<LineChart>` | Recharts 3 is already installed. Tiny inline success/failure trend chart is a small Recharts usage. |
 
 ## Installation
 
-### Backend
-
 ```bash
-# Core
-pip install "fastapi[standard]" uvicorn sqlalchemy[asyncio] aiosqlite alembic pydantic apscheduler playwright
+# Backend -- single new dependency
+# Add to pyproject.toml [project] dependencies:
+#   "rapidfuzz>=3.12.0",
 
-# Install Playwright browsers (one-time)
-playwright install chromium
-
-# Dev dependencies
-pip install pytest pytest-asyncio httpx ruff
+cd backend
+pip install "rapidfuzz>=3.12.0"
 ```
 
-### Frontend
+No frontend installation changes.
 
-```bash
-# Scaffold with Vite
-npm create vite@latest frontend -- --template react-ts
+## rapidfuzz Integration Details
 
-cd frontend
+### Why rapidfuzz (not alternatives)
 
-# Core
-npm install @tanstack/react-query recharts
+For matching product titles like "Samsung Galaxy S24 Ultra 256GB Black" (Amazon) vs "Galaxy S24 Ultra Samsung - 256GB" (Best Buy):
 
-# Styling
-npm install -D tailwindcss @tailwindcss/vite
+- **`fuzz.token_sort_ratio`**: Splits into tokens, sorts alphabetically, then compares. Handles reordered words.
+- **`fuzz.token_set_ratio`**: Handles one title having extra words the other lacks (e.g., color names, "with MagSafe").
+- **`process.cdist`**: Computes full NxN similarity matrix across all tracked product titles in one call. For 100 products, that is 10,000 comparisons -- takes milliseconds with C++ backend.
 
-# Dev tooling (included with Vite scaffold)
-# TypeScript, ESLint already configured
+### Recommended Usage Pattern
+
+```python
+from rapidfuzz import fuzz, process
+
+# Compare two product titles
+score = fuzz.token_sort_ratio(
+    "Samsung Galaxy S24 Ultra 256GB",
+    "Galaxy S24 Ultra Samsung 256GB"
+)
+# Returns ~95.0
+
+# Batch: find all matches above threshold across all titles
+from rapidfuzz.process import cdist
+import numpy as np
+
+titles = [r.product_name for r in all_latest_results]
+scores = cdist(titles, titles, scorer=fuzz.token_sort_ratio)
+# scores[i][j] = similarity between titles[i] and titles[j]
+# Group pairs where scores[i][j] >= threshold
 ```
 
-### Project Structure
+### Match Threshold Guidance
+
+| Score | Interpretation | Action |
+|-------|---------------|--------|
+| >=90 | Almost certainly same product (formatting differences only) | Auto-group |
+| 75-89 | Likely same product (different retailer naming conventions) | Auto-group with lower confidence flag |
+| <75 | Different products | Do not group |
+
+Start with threshold of 80. Expose as a setting in `app_settings` (the model already exists).
+
+### When to Run Matching
+
+Run as a post-scrape batch job, not on every individual scrape:
+1. After a scrape job completes, check if any product_name changed
+2. If yes, re-run matching for that watch query's retailer URLs
+3. Update `product_match_members` table
+
+This avoids expensive NxN comparisons on every scrape when titles have not changed.
+
+## Database Schema Additions
+
+New tables via Alembic migrations (no new DB engine or library):
+
+### New: `product_matches` table
+
+Represents a group of retailer URLs that resolve to the same product.
 
 ```
-price_scraper/
-  backend/
-    app/
-      __init__.py
-      main.py            # FastAPI app, lifespan, CORS
-      config.py           # Settings via pydantic-settings
-      database.py         # Engine, session factory
-      models/             # SQLAlchemy models
-      schemas/            # Pydantic request/response schemas
-      routers/            # API route modules
-      services/           # Business logic (scraping, scheduling, alerts)
-    alembic/              # Migration scripts
-    alembic.ini
-    requirements.txt
-    prices.db             # SQLite file (gitignored)
-  frontend/
-    src/
-      components/         # React components
-      hooks/              # Custom hooks (useQueries, useSSE)
-      pages/              # Dashboard, WatchQueryDetail
-      api/                # API client functions
-      types/              # TypeScript interfaces
-    index.html
-    vite.config.ts
-    tailwind.css
+product_matches:
+  id              INTEGER PRIMARY KEY
+  canonical_name  TEXT        -- best/longest product name from the group
+  created_at      DATETIME
+  updated_at      DATETIME
 ```
 
-## Version Pinning Strategy
+### New: `product_match_members` table
 
-Pin major + minor, allow patch updates. Example `requirements.txt`:
+Links retailer URLs to their match group.
 
 ```
-fastapi>=0.135,<1.0
-sqlalchemy>=2.0.48,<2.1
-aiosqlite>=0.22,<1.0
-alembic>=1.18,<2.0
-pydantic>=2.12,<3.0
-apscheduler>=3.11,<4.0
-playwright>=1.58,<2.0
-uvicorn>=0.34,<1.0
+product_match_members:
+  id                INTEGER PRIMARY KEY
+  product_match_id  INTEGER FK -> product_matches.id
+  retailer_url_id   INTEGER FK -> retailer_urls.id  (UNIQUE constraint)
+  product_name      TEXT        -- raw title from this retailer
+  similarity_score  REAL        -- score vs canonical name
+  created_at        DATETIME
 ```
 
-For frontend, use `package-lock.json` (auto-generated by npm) for reproducible installs.
+### Existing tables -- already sufficient for health + wayback
+
+**`scrape_jobs`** already has: `status` (pending/running/completed/failed), `error_message`, `started_at`, `completed_at`, `watch_query_id`. Derived health metrics:
+- Success rate: `COUNT(status='completed') / COUNT(*)` grouped by watch_query_id
+- Consecutive failures: ordered window on recent jobs
+- Last success: `MAX(completed_at) WHERE status='completed'`
+
+**`scrape_results`** already has: `price_cents`, `created_at`, `retailer_url_id`. Wayback queries:
+- "30 days ago": price from the result closest to `now() - 30 days`
+- "90 days ago": price from the result closest to `now() - 90 days`
+- Historical average: already implemented in `get_rolling_avg_price()`
+
+### Recommended New Indexes
+
+```sql
+-- Speed up health aggregation queries
+CREATE INDEX ix_scrape_jobs_wq_status ON scrape_jobs(watch_query_id, status);
+
+-- Speed up wayback price lookups (date-range scans per URL)
+CREATE INDEX ix_scrape_results_url_created ON scrape_results(retailer_url_id, created_at);
+
+-- Speed up "all results in last N days" scans
+CREATE INDEX ix_scrape_results_created ON scrape_results(created_at);
+```
+
+The `retailer_url_id + created_at` composite index is the most critical -- it makes wayback queries O(log n) instead of full table scans.
+
+## Alternatives Considered
+
+| Recommended | Alternative | Why Not Alternative |
+|-------------|-------------|---------------------|
+| rapidfuzz | thefuzz (fuzzywuzzy) | GPL license. Slower (pure Python fallback). Unmaintained compared to rapidfuzz. rapidfuzz is a strict superset with compatible API. |
+| rapidfuzz | python-Levenshtein | Only provides edit distance, not token-based scorers. Product names need token_sort_ratio for reordered words. |
+| rapidfuzz | spaCy / sentence-transformers | 500MB+ model downloads for NLP. Massive overkill for fuzzy string matching of product titles. Would dominate install size and startup time. |
+| rapidfuzz | Similarity API (SaaS) | External API dependency for a local-only tool. Overkill for <1000 product titles. |
+| SQLAlchemy aggregates for health | Materialized views / denormalized health columns | Premature optimization. For a personal tool with hundreds of scrape jobs, aggregate queries on indexed columns complete in <10ms. Add denormalization only if profiling shows it is needed. |
+| shadcn Table (manual sort) | TanStack Table (@tanstack/react-table) | New dependency for a table with 10-50 rows. Manual sort state in a React component is ~15 lines of code. Add TanStack Table only if requirements grow to filtering + pagination. |
+| Recharts for sparklines | No chart / just numbers | Numbers alone (success rate %, consecutive failures count) are sufficient for MVP. Sparklines are a stretch goal enhancement. |
+
+## What NOT to Add
+
+| Avoid | Why | Do Instead |
+|-------|-----|------------|
+| numpy / pandas for matching | rapidfuzz's `cdist` returns a list-of-lists that works fine without numpy. Adding numpy for one function is wasteful (25MB+ install). | Use rapidfuzz's built-in matrix output |
+| A separate health/metrics DB (InfluxDB, Prometheus) | This is observability of a personal tool, not production monitoring. The scrape_jobs table IS the metrics store. | Query scrape_jobs with SQLAlchemy |
+| Redis for caching health stats | Single user, local app. TanStack Query already caches API responses on the frontend with configurable stale time. | Set `staleTime: 30_000` on health queries in TanStack Query |
+| @tanstack/react-table | The health table is small and simple. Adding a full table library for <50 rows is over-engineering. | shadcn `<Table>` with `useState` for sort |
+| chart.js / visx / nivo | Recharts is already installed and working. Adding a second charting library creates maintenance burden. | Recharts for any new chart needs |
+| Web Workers for fuzzy matching | Matching runs on the backend in Python, not in the browser. The frontend just displays results. | Server-side matching with rapidfuzz |
+
+## Version Compatibility
+
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| rapidfuzz >=3.12.0 | Python >=3.9 | Project requires >=3.10, fully compatible |
+| rapidfuzz >=3.12.0 | SQLAlchemy >=2.0 | No interaction -- rapidfuzz operates on Python strings extracted from query results |
+| rapidfuzz >=3.12.0 | No C compiler needed | Ships pre-built wheels for macOS (darwin), Linux, Windows |
+
+## API Endpoint Patterns (for reference)
+
+New endpoints needed, all using existing FastAPI patterns:
+
+```
+GET  /api/health/urls           -- per-URL health summary (success rate, last success, consecutive failures)
+GET  /api/health/urls/{id}      -- detailed health for one URL (recent job history)
+GET  /api/prices/wayback/{retailer_url_id}?days=30,90  -- price at N days ago
+GET  /api/matches                -- all product match groups
+POST /api/matches/recompute      -- trigger re-matching (admin action)
+```
+
+All follow existing patterns: async route handlers, `Depends(get_db)` for sessions, Pydantic response schemas.
 
 ## Sources
 
-- [FastAPI Release Notes](https://fastapi.tiangolo.com/release-notes/) - Version and SSE feature verification
-- [FastAPI SSE Documentation](https://fastapi.tiangolo.com/tutorial/server-sent-events/) - Native SSE support
-- [SQLAlchemy 2.0 Async Documentation](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html) - Async SQLite patterns
-- [SQLAlchemy PyPI](https://pypi.org/project/SQLAlchemy/) - Version 2.0.48
-- [Alembic Documentation](https://alembic.sqlalchemy.org/) - Version 1.18.4
-- [aiosqlite PyPI](https://pypi.org/project/aiosqlite/) - Version 0.22.1
-- [APScheduler PyPI](https://pypi.org/project/APScheduler/) - Version 3.11.2, v4 not production-ready
-- [fastapi-apscheduler4 PyPI](https://pypi.org/project/fastapi-apscheduler4/) - Confirms v4 not production-ready
-- [Playwright Python Release Notes](https://playwright.dev/python/docs/release-notes) - Version 1.58
-- [Pydantic PyPI](https://pypi.org/project/pydantic/) - Version 2.12.5 stable
-- [Vite 8.0 Announcement](https://vite.dev/blog/announcing-vite8) - Vite 8 with Rolldown
-- [React 19.2 Release](https://react.dev/blog/2025/10/01/react-19-2) - React 19.2.4
-- [TanStack Query](https://tanstack.com/query/latest) - v5.90+
-- [Recharts GitHub](https://github.com/recharts/recharts) - v3.8.0
-- [Tailwind CSS v4.2](https://tailwindcss.com/blog) - v4.2.0
-- [sse-starlette PyPI](https://pypi.org/project/sse-starlette/) - Compared against native FastAPI SSE
+- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- MIT license, C++ core, API documentation
+- [RapidFuzz 3.14.3 documentation](https://rapidfuzz.github.io/RapidFuzz/) -- current stable version, scorer APIs (token_sort_ratio, token_set_ratio, cdist)
+- [2025 Fuzzy Matching Benchmarks](https://similarity-api.com/blog/speed-benchmarks) -- rapidfuzz vs thefuzz performance (16x faster confirmed)
+- [thefuzz GitHub](https://github.com/seatgeek/thefuzz) -- GPL license confirmed, less active maintenance
+- [shadcn/ui Table docs](https://ui.shadcn.com/docs/components/radix/table) -- component API, confirmed already installed in project
+- [shadcn/ui Data Table docs](https://ui.shadcn.com/docs/components/radix/data-table) -- TanStack Table integration pattern (evaluated and deferred)
+- Existing codebase analysis:
+  - `backend/app/models/scrape_job.py` -- confirms status/error_message/timestamps already tracked
+  - `backend/app/repositories/scrape_result.py` -- confirms `get_rolling_avg_price()` pattern exists
+  - `frontend/src/components/ui/table.tsx` -- confirms shadcn Table already installed
+  - `frontend/src/components/dashboard/StatusDot.tsx` -- confirms health indicator component exists
+  - `frontend/src/lib/format.ts` -- confirms price formatting utilities exist
+
+---
+*Stack research for: price tracker v1.1 -- scrape health, wayback prices, fuzzy matching*
+*Researched: 2026-03-22*

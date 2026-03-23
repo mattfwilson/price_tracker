@@ -1,152 +1,242 @@
-# Feature Landscape
+# Feature Research
 
-**Domain:** Personal price tracking / scraping web application
-**Researched:** 2026-03-18
+**Domain:** Price tracker v1.1 -- scrape health monitoring, wayback price comparisons, multi-product fuzzy matching
+**Researched:** 2026-03-22
+**Confidence:** MEDIUM-HIGH
 
-## Table Stakes
+## Scope
 
-Features users expect. Missing = product feels incomplete.
+This research covers ONLY the three new v1.1 features. All v1.0 features (watch query CRUD, scraping, price history, alerts, dashboard) are already built and validated. See git history for prior feature research.
 
-### Watch Query Management
+## Feature Landscape
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Create watch query with URL + threshold | Core loop; the reason the app exists | Low | User pastes a retailer URL, names the query, sets a target price |
-| Edit watch query (threshold, URLs, name) | Users refine thresholds as market prices shift | Low | Inline edit or modal; avoid full-page navigation |
-| Delete watch query | Housekeeping; stale queries clutter the dashboard | Low | Soft-delete with undo toast preferred over confirmation dialog |
-| Pause/resume watch query | Users travel, want to stop alerts without losing config | Low | Toggle on the query card; paused queries skip scheduled scrapes |
-| Multiple URLs per watch query | Same product listed on Amazon, BestBuy, Walmart -- user wants the lowest across all | Medium | Core differentiator of this app vs single-retailer trackers like CamelCamelCamel |
-| On-demand scrape trigger | Users want fresh data NOW, not at next schedule | Low | Button per query; must show loading state and result inline |
+### Table Stakes (Users Expect These)
 
-### Scraping & Data Collection
+Features that any scrape health dashboard, historical price comparison, or product matching system must have to feel complete.
+
+#### 1. Scrape Health Dashboard
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Headless browser scraping (Playwright) | Retailers render prices via JS; static HTTP won't work | Medium | Already decided in PROJECT.md; Playwright is the right call |
-| Extract product name, price, listing URL | Minimum viable data per scrape | Medium | CSS selector-based extraction; retailers change layouts frequently |
-| Scheduled background scraping | The whole point -- unattended monitoring | Medium | APScheduler with configurable intervals (6h, 12h, daily, weekly) |
-| Scrape failure handling with retries | Network errors, layout changes, CAPTCHAs -- scrapes WILL fail | Medium | Retry 2-3x with backoff; surface error status in UI, don't silently swallow |
-| Store every scrape result with timestamp | Price history requires historical data | Low | Append-only; never overwrite previous results |
-| Price delta calculation (up/down/unchanged) | Users need at-a-glance direction, not raw numbers | Low | Compare current vs. previous scrape; display arrow + percentage |
+| Per-URL success/fail status | Users need to know which URLs are broken right now | LOW | ScrapeJob already stores status and error_message; aggregate from existing data |
+| Last successful scrape timestamp | "When did this last actually work?" is the first health question | LOW | Query MAX(created_at) from scrape_results per retailer_url_id |
+| Consecutive failure count | Distinguishes "one-off flake" from "this URL is dead" | LOW | Count recent jobs since last success per URL |
+| Error type classification | Users need to know WHY it failed (blocked vs network vs extraction) | LOW | FailureType enum already exists in base.py (NETWORK_ERROR, EXTRACTION_ERROR, BLOCKED); persist it on ScrapeJob |
+| Visual health indicators | Red/yellow/green status per URL at a glance | LOW | Frontend only; thresholds on success rate and consecutive failures |
+| Filterable/sortable URL list | "Show me all failing URLs" is the core interaction | LOW | Standard table with filter chips for status |
 
-### Price History Display
+**Existing data that supports this:** The `ScrapeJob` model already tracks `status` (pending/success/failed/partial_success), `error_message`, `started_at`, and `completed_at`. The `FailureType` enum (NETWORK_ERROR, EXTRACTION_ERROR, BLOCKED) exists in `base.py` but is NOT persisted on the job -- it is only used for retry logic in `scrape_service.py`. The main schema change needed is storing failure_type on ScrapeJob or a new per-URL outcome record.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Price history line chart per listing | Visual trend is the killer feature of every price tracker (CamelCamelCamel, Keepa) | Medium | Simple line chart with time on X-axis, price on Y-axis; Recharts or Chart.js |
-| Price history sortable table | Users want exact numbers, not just visual trends | Low | Date, price, delta columns; sort by date descending by default |
-| Threshold line on chart | Shows target price visually against history -- instant "how close am I?" | Low | Horizontal dashed line at threshold; high-value, trivial to implement |
-| Time range filter (7d, 30d, 90d, all) | Long histories become unreadable without filtering | Low | Button group above chart; default to 30 days |
+**Key gap:** The current `run_scrape_job` function tracks successes/failures per URL but only stores a concatenated error string. Per-URL outcome (success/fail + type) needs to be individually stored for health aggregation.
 
-### Alert / Notification System
+#### 2. Wayback Price Comparisons
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Alert fires when price <= threshold | The end-to-end value prop: scrape -> detect -> alert | Low | Compare after each scrape; create alert record in DB |
-| In-app notification badge + toast | User must SEE the alert without actively checking | Low | Badge count on nav icon; toast on page load if new alerts exist |
-| Alert log / history view | Users want to see what triggered and when | Low | Simple list: query name, product, price, retailer, timestamp |
-| Mark alert as read/dismissed | Housekeeping; badge count should reflect unread only | Low | Click to dismiss; "mark all read" button |
+| Current price vs N-days-ago price | CamelCamelCamel, Keepa, and Amazon native all show this; table stakes | LOW | SQL query: price at closest timestamp to (now - N days) per retailer_url |
+| Historical low and high | Every price tracker shows all-time low/high; partially built (all-time low badge exists) | LOW | MIN/MAX aggregation on scrape_results; extend existing all-time low logic |
+| 30-day and 90-day average price | Standard time windows per Keepa, Honey, Amazon native | MEDIUM | Rolling average computation on scrape_results within date range |
+| "Good deal" / "bad deal" indicator | Users want a quick verdict, not raw numbers to interpret | LOW | Compare current price to 90-day average; below = good deal, above = bad deal |
+| Price context displayed inline | Stats shown alongside existing price history, not on a separate page | LOW | API enrichment on existing endpoints; frontend badges/chips in drill-down view |
 
-### Dashboard
+**Why these specific time windows:** Research shows 30-day and 90-day are industry standard. Amazon native shows 30-90 days. Keepa free tier shows 90 days. Honey defaults to 30 days with options up to 120. The 30-day window captures recent trend; the 90-day window captures seasonal patterns and sale cycles.
+
+**Computation approach:** These stats are read-heavy but change only when new scrape results arrive. Two viable approaches:
+1. **Compute on read** -- SQL aggregation queries on each API call. Simpler, fine for SQLite with dozens of products and thousands of results.
+2. **Compute on write** -- Recalculate and cache stats after each scrape. More complex but constant-time reads.
+
+Recommendation: Compute on read for v1.1. SQLite handles this scale trivially. Optimize later only if measurably slow.
+
+#### 3. Multi-Product Fuzzy Matching
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Overview of all active watch queries | Single-screen situational awareness | Medium | Card or table layout showing query name, status, lowest current price, last scrape time |
-| Visual indicators for below-threshold | The most important signal must be visually loud | Low | Green highlight, badge, or icon on queries with prices below threshold |
-| Last scrape timestamp per query | "Is this data stale?" is always the first question | Low | Relative time ("2 hours ago") with absolute on hover |
-| Drill-down view per watch query | Dashboard is summary; users need detail on demand | Medium | Click query -> see all listings, prices, deltas, chart |
-| Scrape status indicator (success/error/running) | Users need to know if the system is healthy | Low | Color-coded dot or icon per query |
+| Automatic detection of same-product across retailers | Core value prop; without it, the feature does not exist | HIGH | Fuzzy string matching on product_name across different retailer_url_ids within a watch query |
+| Confidence score on matches | Users need to know if a match is reliable or a guess | MEDIUM | Expose the similarity score from RapidFuzz |
+| Manual confirm/reject of matches | Fuzzy matching always has false positives; user must be able to correct | MEDIUM | UI for match review; persisted accept/reject state |
+| Grouped price comparison view | Once matched, show side-by-side prices across retailers | MEDIUM | New UI component; query matched products and their latest prices |
 
-## Differentiators
-
-Features that set product apart. Not expected, but valued.
+### Differentiators (Competitive Advantage)
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Sparkline on dashboard cards | At-a-glance trend without drill-down; CamelCamelCamel lacks this on overview | Medium | Tiny inline chart per query on the dashboard; shows 30d trend. High polish, moderate effort |
-| Multi-retailer lowest-price comparison | Most trackers are single-retailer; showing "cheapest across all retailers" is genuinely useful | Low | Already have multi-URL per query; just highlight the min price across listings |
-| Configurable schedule per query | Different products need different monitoring cadence (flash sales vs stable goods) | Low | Dropdown per query: every 6h, 12h, daily, weekly |
-| Price drop percentage display | "Dropped 15% from peak" is more actionable than "$42.50" | Low | Calculate from max historical price; show as badge |
-| Export price history (CSV) | Power users want data in spreadsheets | Low | Simple CSV download button on drill-down view |
-| Dark mode | Personal tool used at home; many users prefer dark UI | Medium | CSS variables / Tailwind dark mode; do it right from the start or never |
-| Scrape selector configuration per retailer | When a retailer changes layout, user can update selectors without code changes | High | UI for editing CSS selectors; preview mode to test. Huge resilience win but complex UX |
-| Bulk import watch queries | Setting up 20+ products one-by-one is painful | Low | CSV upload: URL, name, threshold per row |
-| Request throttling / rate limit controls | Avoid getting IP-banned by retailers | Medium | Configurable delay between requests, max concurrent scrapes, per-retailer limits |
+| Health trend over time | ScrapeOps compares current health vs historical moving average; shows degradation before total failure | MEDIUM | Store daily health snapshots; show trend sparkline per URL |
+| Stale URL auto-detection | Proactively flag URLs not returning data in X days; suggest "pause or remove" | LOW | Cron check on last_success; surface in health dashboard with action buttons |
+| Price percentile ranking | "Current price is in the 15th percentile of all prices seen" -- more useful than just average | LOW | Percentile calc on historical prices; single SQL query |
+| Price volatility indicator | Flag products with high price variance; "stable" vs "volatile" badge | MEDIUM | Standard deviation over 90 days; helps user decide monitoring cadence |
+| Best-price-across-retailers highlight | When fuzzy matches exist, auto-highlight which retailer currently has lowest price | LOW | Simple MIN query across match group; high value, trivial once matching exists |
+| Match suggestions queue | Proactively suggest "these might be the same product" on new scrape results | MEDIUM | Run matching after each scrape; surface suggestions in a review UI |
 
-## Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
-Features to explicitly NOT build.
-
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| Multi-user auth system | PROJECT.md explicitly scopes this as single-user personal tool. Auth adds complexity with zero value for the use case | Skip entirely; no login page, no sessions, no user table |
-| Email/SMS/push notifications (v1) | Requires SMTP config, external services, credential management -- all friction for a localhost app | In-app alerts only for v1; design alert system so email can be bolted on later (webhook/event pattern) |
-| Browser extension | Huge separate codebase, browser store publishing, version maintenance | Web dashboard is sufficient for personal use; extension is a different product |
-| Automatic product discovery / recommendations | "Products you might want to track" requires ML, large datasets, user behavior modeling | User manually adds what they care about; that's the correct UX for a personal tool |
-| Price prediction / forecasting | Keepa added AI forecasting, but it requires massive historical datasets across millions of products | Show trends and let the human decide; a personal tracker will never have enough data for useful predictions |
-| Proxy rotation / IP management | Enterprise scraping concern; a personal tool making a few requests per day won't trigger most rate limits | Respect robots.txt, add reasonable delays, use a single IP. If blocked, the user can investigate per-retailer |
-| Mobile app | Separate codebase, deployment pipeline, app store concerns | Responsive web design; the dashboard should work on mobile browsers |
-| Real-time websocket price streaming | Massive over-engineering for a tool that scrapes on a schedule | Poll on page load; refresh button for manual update. Scheduled scrapes happen in background |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Automatic retry on detected failures | "Just keep trying until it works" | Aggressive retrying gets IPs blocked faster; tenacity retry with 4 attempts and exponential backoff already handles transient failures in scrape_service.py | Show failure clearly in health dashboard; let user manually re-trigger or adjust schedule |
+| Real-time scrape status websocket | "I want to see scrapes happening live" | Significant complexity (websocket infra) for a feature used rarely; scrapes take seconds | Poll-based refresh on health dashboard; "last refreshed" timestamp |
+| AI/LLM-powered product matching | "Use embeddings to match products" | Massive complexity, requires model hosting or API costs, overkill for dozens of products. Per affiliate.com research, LLMs actually fail at product identity -- they collapse lookalikes (bundles, variants) and over-trust names | RapidFuzz string matching with manual confirmation handles personal-tool scale perfectly |
+| Automatic URL discovery for matched products | "Find this product on other retailers automatically" | Requires search engine scraping or API access; fragile, expensive, explicitly out of scope per PROJECT.md | User provides URLs explicitly; matching only groups URLs already tracked |
+| Historical price prediction | "Tell me when the price will drop" | Requires ML modeling, large datasets; fundamentally unreliable for most products | Show volatility and trend direction instead; let user make the judgment call |
+| Normalized $/unit comparison | "Compare price per unit across pack sizes" | Requires parsing quantities and units from unstructured titles; error-prone | Show raw prices with product names; user sees "Pack of 2" in the title |
+| Cross-query product matching | "Match products across different watch queries" | Significantly increases matching complexity and false positive rate; user intent is already encoded in watch query grouping | Match only within a watch query's retailer URLs; cross-query is v2+ if ever |
 
 ## Feature Dependencies
 
 ```
-Store scrape results with timestamp
-  -> Price delta calculation (requires previous result to compare)
-  -> Price history table (requires historical records)
-  -> Price history line chart (requires historical records)
-    -> Threshold line on chart (requires chart + threshold data)
-    -> Time range filter (requires chart)
-    -> Sparkline on dashboard (requires chart component + historical data)
+[Scrape Health Dashboard]
+    +--requires--> [Persisted per-URL scrape outcome] (schema change: add failure_type to ScrapeJob or new outcome table)
+    +--requires--> [Health stats aggregation endpoint] (new API)
+    +--enhances--> [Existing dashboard query cards] (add health indicator dot)
 
-Create watch query with URL + threshold
-  -> Scheduled background scraping (requires queries to exist)
-    -> Scrape failure handling (requires scraping to run)
-  -> On-demand scrape trigger (requires query to exist)
-  -> Alert fires when price <= threshold (requires threshold + scrape result)
-    -> In-app notification badge + toast (requires alert records)
-    -> Alert log / history view (requires alert records)
-    -> Mark alert as read/dismissed (requires alert records)
+[Wayback Price Comparisons]
+    +--requires--> [Sufficient historical scrape data] (existing; just needs time to accumulate)
+    +--requires--> [Price stats computation] (new service/queries)
+    +--enhances--> [Existing price history view] (adds stat overlays and badges)
+    +--enhances--> [Existing all-time low badge] (extends with more context)
 
-Dashboard overview
-  -> Visual indicators for below-threshold (requires dashboard + alert logic)
-  -> Drill-down view per query (requires dashboard navigation)
-  -> Scrape status indicator (requires scrape job status tracking)
+[Multi-Product Fuzzy Matching]
+    +--requires--> [RapidFuzz pip dependency] (new)
+    +--requires--> [Product match group model] (new DB table)
+    +--requires--> [Match computation service] (new backend service)
+    +--enhances--> [Scrape Health Dashboard] (view health per match group)
+    +--enhances--> [Wayback Price Comparisons] (cross-retailer price context)
 
-Headless browser scraping (Playwright)
-  -> Extract product name, price, listing URL (requires scraping engine)
-    -> Scrape selector configuration per retailer (extends extraction logic)
+[Manual Match Confirmation]
+    +--requires--> [Multi-Product Fuzzy Matching]
+
+[Best-Price-Across-Retailers]
+    +--requires--> [Multi-Product Fuzzy Matching]
+    +--requires--> [Grouped price comparison view]
 ```
 
-## MVP Recommendation
+### Dependency Notes
 
-Prioritize (in build order):
+- **Scrape Health Dashboard is fully independent.** Can be built first with zero dependencies on the other two features. Uses existing ScrapeJob/ScrapeResult data with minor schema additions.
+- **Wayback Price Comparisons is fully independent.** Only needs existing scrape_results table. Pure computation on historical data already stored.
+- **Fuzzy Matching depends on neither but enhances both.** Once match groups exist, health can be viewed per product (across retailers) and price comparisons become cross-retailer.
+- **Build order implication:** Health and Wayback can be built in parallel. Fuzzy Matching should come last because it enhances the other two and has the longest tail (matching + review UI + grouped view).
 
-1. **Watch query CRUD** -- create, edit, pause, delete. The data model everything else depends on.
-2. **Playwright scraping engine** -- extract price, name, URL from a single retailer page. Start with one retailer (Amazon) and get it solid.
-3. **Scrape result storage + price delta** -- append-only history, calculate direction.
-4. **Scheduled scraping via APScheduler** -- the unattended loop that makes this useful.
-5. **Dashboard overview** -- cards for each query with latest price, delta, last scrape time, status.
-6. **Price history chart + table** -- line chart with threshold line on drill-down view.
-7. **Alert system** -- threshold comparison, in-app badge/toast, alert log.
-8. **Multi-retailer support** -- extend scraping to BestBuy, Walmart; highlight lowest price.
+## MVP Definition
 
-Defer:
-- **Scrape selector configuration UI**: High complexity, build it after the core loop works. Hardcode selectors per retailer initially and iterate.
-- **Export to CSV**: Low effort but low priority; add after core features are solid.
-- **Dark mode**: Do it from the start if using Tailwind (cheap), otherwise defer.
-- **Bulk import**: Nice-to-have after the single-query flow is polished.
+### Launch With (v1.1 Core)
+
+- [ ] Per-URL health status with success rate, last success, consecutive failures, and error type -- minimum useful health dashboard
+- [ ] Visual health indicators (red/yellow/green) on existing dashboard cards -- immediate visibility without navigating to health page
+- [ ] Filterable health URL list -- "show me all failing URLs" flow
+- [ ] 30-day and 90-day price-ago comparisons -- "price 30 days ago was $X"
+- [ ] 30-day and 90-day average price -- standard context stats
+- [ ] Historical low/high display extending existing all-time low badge
+- [ ] Good deal / bad deal indicator based on 90-day average
+- [ ] Automatic fuzzy matching with confidence scores using RapidFuzz
+- [ ] Manual confirm/reject for match suggestions -- mandatory because fuzzy matching always has false positives
+- [ ] Grouped comparison view for confirmed matches -- the payoff; without this, matching is pointless
+
+### Add After Validation (v1.1+)
+
+- [ ] Health trend sparklines -- add once users check health dashboard regularly and want to see degradation over time
+- [ ] Price volatility indicator -- add once enough historical data exists (needs 30+ data points per URL)
+- [ ] Price percentile ranking -- easy to add once price stats service exists
+- [ ] Stale URL auto-detection with suggested actions -- add once health dashboard proves useful
+- [ ] Best-price-across-retailers highlight -- low effort once matching is built
+
+### Future Consideration (v2+)
+
+- [ ] Health alerting (notify when a URL degrades) -- deferred because notifications are out of scope
+- [ ] Match group price alerts (alert when any retailer in a group drops) -- requires notification infrastructure
+- [ ] Cross-query product matching -- significantly increases complexity
+
+## Feature Prioritization Matrix
+
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Per-URL health status (success rate, last success, failures) | HIGH | LOW | P1 |
+| Error type persistence and display | HIGH | LOW | P1 |
+| Visual health indicators (red/yellow/green) | HIGH | LOW | P1 |
+| Filterable URL health list | MEDIUM | LOW | P1 |
+| 30d/90d price-ago comparison | HIGH | LOW | P1 |
+| Historical low/high display | HIGH | LOW | P1 |
+| 30d/90d average price | HIGH | MEDIUM | P1 |
+| Good deal / bad deal indicator | MEDIUM | LOW | P1 |
+| Automatic fuzzy matching (RapidFuzz) | HIGH | MEDIUM | P1 |
+| Match confidence scores | HIGH | LOW | P1 |
+| Manual confirm/reject matches | HIGH | MEDIUM | P1 |
+| Grouped price comparison view | HIGH | MEDIUM | P1 |
+| Best-price-across-retailers highlight | MEDIUM | LOW | P2 |
+| Health trend sparklines | MEDIUM | MEDIUM | P2 |
+| Stale URL auto-detection | MEDIUM | LOW | P2 |
+| Price percentile ranking | LOW | LOW | P3 |
+| Price volatility indicator | LOW | MEDIUM | P3 |
+
+**Priority key:**
+- P1: Must have for v1.1 milestone
+- P2: Should have, add if time permits within v1.1
+- P3: Nice to have, defer to v1.2+
+
+## Competitor Feature Analysis
+
+| Feature | CamelCamelCamel | Keepa | ScrapeOps (scrape monitoring) | Our Approach |
+|---------|-----------------|-------|-------------------------------|--------------|
+| Price history chart | Full history since 2008; simple clean graphs | 90d free / full paid; detailed multi-line charts with Buy Box, used, 3P | N/A | Already built; enhance with stat overlay lines |
+| Historical price stats | Low/high/average per timeframe categories | Hourly granularity, percentiles, sales rank | N/A | 30d/90d avg, all-time low/high, price-ago comparison, good/bad deal badge |
+| Scrape health monitoring | N/A (API-based, internal only) | N/A | Success rates, error rates, latency, health vs moving avg, CAPTCHA detection | Per-URL success rate, consecutive failure count, error type, filterable list |
+| Cross-retailer matching | Amazon-only, no cross-retailer | Amazon-only | N/A | RapidFuzz on product titles within watch query, manual confirmation |
+| Deal assessment | Price drop alerts | Price drop alerts + sales rank correlation | N/A | Good/bad deal badge based on 90d average comparison |
+
+## Fuzzy Matching: Reliability Deep-Dive
+
+This is the highest-risk feature in the milestone. Research findings on what makes matching reliable vs noisy.
+
+### What Makes Matching Reliable
+
+1. **Normalize before comparing.** Strip retailer-specific prefixes/suffixes, normalize case, punctuation, and whitespace. "Samsung Galaxy S24 Ultra 256GB" vs "SAMSUNG Galaxy S24 Ultra, 256 GB" should score high after normalization.
+
+2. **Use token-based similarity, not character-based.** RapidFuzz `token_sort_ratio` and `token_set_ratio` handle word reordering and subset matching. Character-based Levenshtein alone fails on product titles because retailers freely reorder words ("Samsung 65-inch QLED TV" vs "65\" Samsung QLED Smart TV").
+
+3. **Set a conservative threshold (85-90%).** Research consistently recommends starting high and lowering only if too few matches. Per Data Ladder: "Setting the similarity threshold too low leads to merging incorrect data." Start at 85%.
+
+4. **Scope matches within watch query.** The app architecture already groups retailer URLs by watch query, which represents one product intent. Only match within a query's URLs. This dramatically reduces false positives compared to matching across all products.
+
+5. **Human-in-the-loop is mandatory.** Per affiliate.com research, even barcode-based matching needs human verification. Fuzzy title matching absolutely needs confirm/reject. Unreviewed automatic grouping will produce false positives (e.g., matching a phone case with the phone).
+
+### What Makes Matching Noisy
+
+1. **Retailer-specific title padding.** Amazon adds "Visit the X Store" and brand lines. Walmart appends item counts and seller info. Best Buy adds internal SKUs. Pre-normalization must strip these.
+
+2. **Variant confusion.** "iPhone 16 128GB Black" vs "iPhone 16 256GB White" score very high but are different products. Title-only matching cannot reliably distinguish storage/color/size variants.
+
+3. **Bundle vs single items.** "AirPods Pro (2-pack)" vs "AirPods Pro" match with high confidence but are different purchases.
+
+4. **Model year/generation drift.** "Sony WH-1000XM5" vs "Sony WH-1000XM4" differ by one character but are different products.
+
+### Recommended Matching Strategy
+
+Given the app's scope (personal tool, dozens of products, not thousands):
+
+- **Library:** RapidFuzz (MIT license, C++ backend, 40% faster than TheFuzz, same API). Use `token_set_ratio` for primary scoring.
+- **Pre-normalization pipeline:** Lowercase, strip common retailer prefixes ("Visit the X Store"), remove punctuation except hyphens in model numbers, normalize whitespace, strip trailing parenthetical info like "(Renewed)" or "(2-pack)".
+- **Threshold:** 85% initial, surface matches above that as suggestions.
+- **Scope:** Within a single watch query's retailer URLs only.
+- **Workflow:** Auto-detect on each new scrape result, queue suggestions, user confirms or rejects, confirmed matches persist, rejected pairs are not re-suggested.
+- **Storage:** New `product_match_group` table with status (suggested/confirmed/rejected), similarity score, and retailer_url pair references.
+
+### Why Not More Sophisticated Approaches
+
+- **Barcodes/UPC/MPN:** The app scrapes retailer pages, not product databases. Barcodes are rarely on the rendered page. Would require additional scraping logic per retailer. Overkill for personal tool scale.
+- **Image matching:** Would require downloading and comparing product images. Massive complexity increase. Product titles are sufficient for the use case.
+- **Embeddings/semantic matching:** Requires a model (local or API). Adds dependency, latency, and complexity. RapidFuzz handles the personal-tool scale. Reserve this for if title matching proves insufficient.
 
 ## Sources
 
-- [CamelCamelCamel vs Keepa comparison](https://goaura.com/blog/camelcamelcamel-vs-keepa) - Feature comparison of major price trackers
-- [Keepa vs CamelCamelCamel vs Honey (2026)](https://taskmonkey.ai/blog/amazon-price-tracker/keepa-vs-camelcamelcamel-vs-honey) - Multi-tracker feature analysis
-- [Best Price Trackers 2026 - Karmanow](https://www.karmanow.com/the-blog/top/the-best-price-trackers) - Market overview of price tracking apps
-- [Top Price Monitoring Tools (2026) - Price2Spy](https://www.price2spy.com/blog/top-price-monitoring-tools/) - Enterprise and consumer tool comparison
-- [Best Free and Open-Source Price Tracking Tools 2026 - Robotalp](https://robotalp.com/blog/the-best-free-and-open-source-price-stock-tracking-and-alarm-tools-of-2026/) - Open source alternatives
-- [PriceGhost - Self-hosted price tracker](https://github.com/clucraft/PriceGhost) - Multi-strategy extraction approach
-- [PriceBuddy - Self-hosted tracker](https://github.com/jez500/pricebuddy) - Self-hosted notification patterns
-- [Web Scraping Best Practices 2026 - ScrapingBee](https://www.scrapingbee.com/blog/web-scraping-best-practices/) - Rate limiting and anti-detection
-- [Web Scraping Challenges 2025 - ScrapingBee](https://www.scrapingbee.com/blog/web-scraping-challenges/) - Current anti-bot landscape
-- [Alert and Notification in Web Scraping - Browse AI](https://www.browse.ai/glossary/alert-notification-web-scraping) - Alert system patterns
-- [PatternFly Sparkline Chart Guidelines](https://www.patternfly.org/charts/sparkline-chart/design-guidelines/) - Sparkline UX patterns
+- [ScrapeOps Monitoring](https://scrapeops.io/monitoring-scheduling/) -- scrape health dashboard metrics and patterns
+- [CamelCamelCamel](https://camelcamelcamel.com/) -- price tracker UI patterns, historical stats
+- [Amazon Price History: 30 vs 90 Days](https://taskmonkey.ai/blog/amazon-price-tracker/amazon-price-history-30-vs-90-days) -- time window analysis for price trackers
+- [CamelCamelCamel vs Keepa](https://goaura.com/blog/camelcamelcamel-vs-keepa) -- competitor feature comparison
+- [How LLMs Fail on Product Identity](https://blog.affiliate.com/how-llms-fail-on-product-identity-and-how-to-fix-it-with-barcodes-mpns-and-deduplication-rules/) -- product matching pitfalls, why barcodes beat names
+- [Fuzzy Matching 101 - Data Ladder](https://dataladder.com/fuzzy-matching-101/) -- matching algorithm categories and threshold guidance
+- [Walmart Product Matching](https://medium.com/walmartglobaltech/product-matching-in-ecommerce-4f19b6aebaca) -- e-commerce matching at scale
+- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- recommended fuzzy matching library, MIT license, C++ performance
+- [2025 Fuzzy Matching Benchmarks](https://similarity-api.com/blog/speed-benchmarks) -- RapidFuzz 40% faster than TheFuzz
+- [ScraperAPI Analytics](https://docs.scraperapi.com/account-management/analytics) -- domain-level scrape analytics patterns
+
+---
+*Feature research for: Price tracker v1.1 -- scrape health, wayback prices, fuzzy matching*
+*Researched: 2026-03-22*

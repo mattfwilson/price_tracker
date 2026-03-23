@@ -1,522 +1,474 @@
-# Architecture Patterns
+# Architecture Research
 
-**Domain:** Price scraping / price tracking web application
-**Researched:** 2026-03-18
+**Domain:** Price tracker v1.1 -- scrape health, wayback price comparisons, fuzzy product matching
+**Researched:** 2026-03-22
+**Confidence:** HIGH
 
-## Recommended Architecture
+## Existing Architecture Summary
 
-Single-process monolith with four clearly separated internal layers. FastAPI serves both the REST API and the React SPA (static build). APScheduler runs in-process, sharing the same event loop. SQLite is the sole data store, accessed through SQLAlchemy async (via aiosqlite). Playwright runs headless Chromium for scraping.
-
-```
-+------------------------------------------------------------------+
-|  Browser (React SPA)                                             |
-|  - Dashboard, watch query CRUD, price history charts, alerts     |
-|  - Connects via REST + SSE for real-time alert notifications     |
-+------------------------------------------------------------------+
-        |  HTTP REST  |  SSE (server-push)
-        v             v
-+------------------------------------------------------------------+
-|  FastAPI Application Process                                     |
-|                                                                  |
-|  +------------------+  +------------------+  +----------------+  |
-|  |  API Layer       |  |  Scheduler Layer |  |  SSE Manager   |  |
-|  |  (routers/)      |  |  (APScheduler)   |  |  (event bus)   |  |
-|  +--------+---------+  +--------+---------+  +-------+--------+  |
-|           |                      |                    ^           |
-|           v                      v                    |           |
-|  +------------------+  +------------------+           |           |
-|  |  Service Layer   |  |  Scraping Service|----notify-+           |
-|  |  (services/)     |  |  (scrapers/)     |                      |
-|  +--------+---------+  +--------+---------+                      |
-|           |                      |                                |
-|           v                      v                                |
-|  +-----------------------------------------------+               |
-|  |  Data Layer (models/, repositories/, schemas/) |               |
-|  |  SQLAlchemy async ORM  +  aiosqlite           |               |
-|  +-----------------------------------------------+               |
-|           |                                                      |
-|           v                                                      |
-|  +-------------------+                                           |
-|  |  SQLite (WAL mode)|                                           |
-|  |  price_scraper.db |                                           |
-|  +-------------------+                                           |
-+------------------------------------------------------------------+
-```
-
-### Component Boundaries
-
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **React Frontend** | UI rendering, user interaction, data visualization (charts), alert display | API Layer (REST), SSE Manager (EventSource) |
-| **API Layer** (`routers/`) | HTTP request handling, input validation, response serialization | Service Layer, SSE Manager |
-| **Service Layer** (`services/`) | Business logic: CRUD for watch queries, alert evaluation, price delta calculation | Data Layer, Scraping Service, SSE Manager |
-| **Scraping Service** (`scrapers/`) | Playwright browser automation, retailer-specific extraction, retry logic | Data Layer (writes results), SSE Manager (emits events) |
-| **Scheduler Layer** | APScheduler lifecycle, job registration/removal, cron/interval triggers | Scraping Service (invokes scrape jobs) |
-| **SSE Manager** | In-memory event bus, manages active SSE connections, pushes notifications | Frontend (SSE stream) |
-| **Data Layer** (`models/`, `repositories/`) | SQLAlchemy models, database queries, session management | SQLite database |
-
-### Key Boundary Rules
-
-1. **Routers never import scrapers directly.** Routers call services; services orchestrate scrapers.
-2. **Scrapers never import routers.** Scrapers write to DB via repositories, then emit events to the SSE manager.
-3. **The scheduler only calls service-layer functions.** It does not contain business logic itself.
-4. **The frontend never talks to the scheduler directly.** On-demand scrapes go through a REST endpoint that invokes the service layer.
-
-## Data Flow
-
-### Primary Flow: Scheduled Scrape
+The current system is a single-process monolith with clean layered separation:
 
 ```
-1. APScheduler fires interval/cron trigger
-2. Scheduler calls scraping_service.run_scrape(watch_query_id)
-3. scraping_service loads WatchQuery + its retailer URLs from DB
-4. For each retailer URL:
-   a. Scraping service selects the appropriate retailer extractor
-   b. Playwright launches page, waits for content, extracts price data
-   c. Result (product_name, price, url, timestamp) written to ScrapeResult table
-   d. Price delta calculated vs. previous ScrapeResult for same listing
-5. Alert evaluation: if price <= threshold, create Alert record
-6. If alert created: push event to SSE manager
-7. SSE manager fans out to all connected EventSource clients
-8. React frontend shows toast notification + updates badge count
+Frontend (React + TanStack Query + shadcn/ui)
+    |
+    | REST API + SSE
+    v
+API Layer (FastAPI routers: watch_queries, scrapes, alerts)
+    |
+    v
+Service Layer (scrape_service, alert_service, scheduler)
+    |
+    v
+Repository Layer (scrape_result, watch_query, alert repos)
+    |
+    v
+Models (SQLAlchemy async ORM)
+    |
+    v
+SQLite (WAL mode, single file)
 ```
 
-### Secondary Flow: On-Demand Scrape
+**Existing entities:**
+- `watch_queries` -- user-created targets with threshold, schedule, alert cooldown
+- `retailer_urls` -- belongs to watch_query, the URLs to scrape
+- `scrape_jobs` -- one per scheduled/on-demand run, has status (success/failed/partial_success) and error_message
+- `scrape_results` -- immutable price snapshots (product_name, price_cents, retailer_name, listing_url, created_at), belongs to retailer_url and scrape_job
+- `alerts` -- triggered when price conditions are met
+- `app_settings` -- key-value config store
 
-```
-1. User clicks "Scrape Now" in React UI
-2. POST /api/watch-queries/{id}/scrape
-3. Router calls scraping_service.run_scrape(watch_query_id)
-4. Same steps 3-8 as above
-5. Response returns scrape status (started/completed) to frontend
-```
+**Critical observation for Feature 1:** `scrape_results` only stores SUCCESSFUL scrapes. When a URL fails, the only record is a concatenated error string on `scrape_job.error_message`. There is no per-URL failure tracking. This is the primary data gap.
 
-### Secondary Flow: Watch Query CRUD
+**Critical observation for Feature 2:** `scrape_results` already has all the price history data needed. The repository already has `get_rolling_avg_price()` and `get_all_time_min_price()`. Wayback stats are a computation problem, not a storage problem.
 
-```
-1. User creates/edits watch query in React UI
-2. POST/PUT /api/watch-queries/
-3. Router validates via Pydantic schema, calls watch_query_service
-4. Service persists to DB
-5. Service registers/updates APScheduler job with new schedule
-6. Response returns created/updated watch query
-```
+**Critical observation for Feature 3:** Product names come from scrape results and are retailer-specific strings. Different retailers format the same product name differently. Matching requires fuzzy comparison across all retailer_urls, not just within a single watch_query.
 
-## Database Schema Shape
+## Feature 1: Scrape Health Dashboard
 
-Six tables covering the core domain. SQLite with WAL mode enabled for concurrent read/write.
+### The Data Gap
 
-```
-+-------------------+       +----------------------+
-| watch_queries     |       | retailer_urls        |
-+-------------------+       +----------------------+
-| id (PK)           |<------| id (PK)              |
-| name              |       | watch_query_id (FK)  |
-| search_term       |       | url                  |
-| price_threshold   |       | retailer_name        |
-| schedule_type     |       | created_at           |
-| schedule_interval |       +----------------------+
-| is_active         |                |
-| created_at        |                |
-| updated_at        |                v
-+-------------------+       +----------------------+
-                            | scrape_results       |
-                            +----------------------+
-                            | id (PK)              |
-                            | retailer_url_id (FK) |
-                            | product_name         |
-                            | price (DECIMAL)      |
-                            | listing_url          |
-                            | price_delta          |
-                            | status (enum)        |
-                            | error_message        |
-                            | scraped_at           |
-                            +----------------------+
-                                     |
-                                     v
-+-------------------+       +----------------------+
-| alerts            |       | scrape_jobs          |
-+-------------------+       +----------------------+
-| id (PK)           |       | id (PK)              |
-| watch_query_id(FK)|       | watch_query_id (FK)  |
-| scrape_result_id  |       | apscheduler_job_id   |
-| threshold_at_time |       | schedule_type        |
-| triggered_price   |       | schedule_value       |
-| is_read           |       | last_run_at          |
-| created_at        |       | next_run_at          |
-+-------------------+       | status               |
-                            +----------------------+
+When `scrape_service.run_scrape_job()` processes each URL, failures are:
+1. Counted in local `failures` variable
+2. Appended to an `error_messages` list
+3. Concatenated into `scrape_job.error_message`
 
-+-------------------+
-| app_settings      |
-+-------------------+
-| key (PK)          |
-| value             |
-+-------------------+
-```
+This means per-URL failure history is lost. You cannot query "how many times did URL X fail in the last 7 days?" or "what was the last error for URL X?"
 
-**Schema notes:**
-- `price` stored as integer cents (e.g., 1999 = $19.99) to avoid floating-point issues. Never use FLOAT for money.
-- `price_delta` is computed on write: current price minus previous price for the same retailer_url_id.
-- `scrape_jobs` mirrors APScheduler state for UI display. APScheduler's own job store is separate (its default memory store is fine for single-process).
-- `app_settings` is a simple key-value table for global config (default schedule, etc.).
-- `status` enum on scrape_results: `success`, `failed`, `pending`.
+### Recommended Approach: New `scrape_attempts` Table
 
-## Project Directory Structure
+Do NOT retrofit `scrape_results` with error rows (pollutes every price query) or parse `scrape_job.error_message` strings (fragile, lossy). Add a dedicated table.
 
-```
-price_scraper/
-+-- backend/
-|   +-- app/
-|   |   +-- __init__.py
-|   |   +-- main.py              # FastAPI app, lifespan, CORS, static mount
-|   |   +-- config.py            # Settings via pydantic-settings
-|   |   +-- database.py          # Engine, session factory, WAL pragma
-|   |   +-- routers/
-|   |   |   +-- watch_queries.py
-|   |   |   +-- scrape_results.py
-|   |   |   +-- alerts.py
-|   |   |   +-- events.py        # SSE endpoint
-|   |   +-- services/
-|   |   |   +-- watch_query_service.py
-|   |   |   +-- scraping_service.py
-|   |   |   +-- alert_service.py
-|   |   +-- scrapers/
-|   |   |   +-- base.py           # Abstract base extractor
-|   |   |   +-- amazon.py
-|   |   |   +-- bestbuy.py
-|   |   |   +-- walmart.py
-|   |   |   +-- generic.py        # Fallback: JSON-LD / Open Graph
-|   |   +-- models/
-|   |   |   +-- watch_query.py
-|   |   |   +-- retailer_url.py
-|   |   |   +-- scrape_result.py
-|   |   |   +-- alert.py
-|   |   +-- schemas/              # Pydantic request/response models
-|   |   |   +-- watch_query.py
-|   |   |   +-- scrape_result.py
-|   |   |   +-- alert.py
-|   |   +-- repositories/        # DB query functions (thin ORM layer)
-|   |   |   +-- watch_query_repo.py
-|   |   |   +-- scrape_result_repo.py
-|   |   |   +-- alert_repo.py
-|   |   +-- scheduler/
-|   |   |   +-- setup.py          # APScheduler config, lifespan integration
-|   |   |   +-- jobs.py           # Job functions (thin wrappers around services)
-|   |   +-- events/
-|   |   |   +-- manager.py        # SSE connection manager + event bus
-|   +-- alembic/                  # DB migrations
-|   +-- tests/
-|   +-- requirements.txt
-+-- frontend/
-|   +-- src/
-|   |   +-- components/
-|   |   +-- pages/
-|   |   +-- hooks/
-|   |   +-- api/                  # API client (fetch wrappers)
-|   |   +-- types/
-|   +-- package.json
-+-- README.md
-```
+### New Model: `ScrapeAttempt`
 
-## Patterns to Follow
-
-### Pattern 1: Retailer Extractor Strategy
-
-Each retailer gets its own extractor class inheriting from a base. This isolates selector logic per site and makes adding new retailers straightforward.
-
-**What:** Strategy pattern for retailer-specific scraping logic.
-**When:** Every scrape operation.
-**Example:**
 ```python
-# scrapers/base.py
-from abc import ABC, abstractmethod
-from playwright.async_api import Page
-from dataclasses import dataclass
+class ScrapeAttempt(Base):
+    __tablename__ = "scrape_attempts"
 
-@dataclass
-class ScrapeData:
-    product_name: str
-    price_cents: int          # Always store as cents
-    listing_url: str
-
-class BaseExtractor(ABC):
-    """One per retailer. Encapsulates all selector/parsing logic."""
-
-    @abstractmethod
-    async def extract(self, page: Page, url: str) -> ScrapeData:
-        """Navigate to URL and extract price data."""
-        ...
-
-    @abstractmethod
-    def matches(self, url: str) -> bool:
-        """Return True if this extractor handles the given URL."""
-        ...
-
-# scrapers/amazon.py
-class AmazonExtractor(BaseExtractor):
-    def matches(self, url: str) -> bool:
-        return "amazon.com" in url or "amazon.ca" in url
-
-    async def extract(self, page: Page, url: str) -> ScrapeData:
-        await page.goto(url, wait_until="domcontentloaded")
-        # Try JSON-LD first (most reliable)
-        json_ld = await self._try_json_ld(page)
-        if json_ld:
-            return json_ld
-        # Fall back to selectors
-        price_el = await page.query_selector("#priceblock_ourprice, .a-price .a-offscreen")
-        ...
+    id: Mapped[int] = mapped_column(primary_key=True)
+    retailer_url_id: Mapped[int] = mapped_column(ForeignKey("retailer_urls.id"))
+    scrape_job_id: Mapped[int] = mapped_column(ForeignKey("scrape_jobs.id"))
+    status: Mapped[str] = mapped_column(String(20))  # "success" | "error"
+    error_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 ```
 
-### Pattern 2: APScheduler Lifespan Integration
+**Integration point:** Modify `scrape_service.run_scrape_job()` to create a `ScrapeAttempt` row for EVERY URL processed. The try/except block already distinguishes success from failure -- add one row in each branch. This is a ~10-line change.
 
-**What:** Start/stop APScheduler tied to FastAPI's lifespan context manager.
-**When:** Application startup/shutdown.
-**Example:**
+### New API Endpoint
+
+```
+GET /scrape-health
+```
+
+Response schema:
+
 ```python
-# main.py
-from contextlib import asynccontextmanager
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+class UrlHealthResponse(BaseModel):
+    retailer_url_id: int
+    url: str
+    watch_query_id: int
+    watch_query_name: str
+    total_attempts: int         # last 30 days
+    success_count: int
+    failure_count: int
+    success_rate: float         # 0.0 - 1.0
+    last_success_at: datetime | None
+    last_failure_at: datetime | None
+    consecutive_failures: int
+    last_error_type: str | None
+    last_error_message: str | None
 
-scheduler = AsyncIOScheduler()
+class HealthSummaryResponse(BaseModel):
+    total_urls: int
+    healthy_count: int          # success_rate > 0.8
+    degraded_count: int         # 0.5 - 0.8
+    failing_count: int          # < 0.5
+    never_succeeded_count: int
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup: init Playwright browser, start scheduler
-    app.state.browser = await playwright_manager.launch()
-    scheduler.start()
-    # Re-register jobs from DB for watch queries marked active
-    await restore_scheduled_jobs(scheduler)
-    yield
-    # Shutdown: stop scheduler, close browser
-    scheduler.shutdown(wait=False)
-    await app.state.browser.close()
-
-app = FastAPI(lifespan=lifespan)
+class ScrapeHealthResponse(BaseModel):
+    urls: list[UrlHealthResponse]
+    summary: HealthSummaryResponse
 ```
 
-### Pattern 3: SSE for Real-Time Alerts (Not WebSocket)
+**Computation:** Query-time aggregation from `scrape_attempts`. SQLite handles this fine for a personal tool. No caching or materialized views needed.
 
-**What:** Server-Sent Events for pushing alert notifications to the frontend.
-**Why SSE over WebSocket:** Communication is unidirectional (server to client only). SSE auto-reconnects natively in browsers. Simpler to implement. No bidirectional channel needed -- user actions go through REST.
-**When:** Alert fires, scrape status updates.
-**Example:**
+**Consecutive failure count:** Query the most recent N attempts for a URL ordered by `created_at DESC`, count leading "error" rows until the first "success".
+
+### Frontend Components
+
+| Component | New/Modified | Purpose |
+|-----------|-------------|---------|
+| `ScrapeHealthPage` | NEW | Top-level page at `/health` route |
+| `HealthTable` | NEW | Sortable table of URL health metrics |
+| `HealthBadge` | NEW | Color-coded badge (green/yellow/red) based on success_rate |
+| `Header` | MODIFIED | Add nav link to health page |
+| `ListingRow` | MODIFIED | Show health indicator per URL in detail view |
+
+### Data Flow
+
+```
+APScheduler triggers scrape
+    |
+    v
+scrape_service.run_scrape_job()
+    |-- for each retailer_url:
+    |     |-- attempt scrape
+    |     |-- CREATE scrape_attempt (success or error)  <-- NEW
+    |     |-- if success: CREATE scrape_result (unchanged)
+    |
+    v
+Frontend: GET /scrape-health
+    |
+    v
+Repository: aggregate scrape_attempts per retailer_url (SQL GROUP BY + window)
+    |
+    v
+Response: ScrapeHealthResponse
+```
+
+## Feature 2: Wayback Price Comparisons
+
+### No New Tables Needed
+
+All data exists in `scrape_results`. This feature adds:
+1. New repository query functions
+2. Extended API response schema
+3. New frontend display component
+
+### New Repository Function
+
 ```python
-# events/manager.py
-import asyncio
-from typing import AsyncGenerator
-
-class EventManager:
-    def __init__(self):
-        self._subscribers: list[asyncio.Queue] = []
-
-    async def subscribe(self) -> AsyncGenerator[str, None]:
-        queue: asyncio.Queue = asyncio.Queue()
-        self._subscribers.append(queue)
-        try:
-            while True:
-                data = await queue.get()
-                yield f"data: {data}\n\n"
-        finally:
-            self._subscribers.remove(queue)
-
-    async def publish(self, event_data: str):
-        for queue in self._subscribers:
-            await queue.put(event_data)
-
-event_manager = EventManager()
-
-# routers/events.py
-from sse_starlette.sse import EventSourceResponse
-
-@router.get("/events")
-async def event_stream():
-    return EventSourceResponse(event_manager.subscribe())
+async def get_wayback_stats(
+    session: AsyncSession, retailer_url_id: int
+) -> WaybackStats:
+    """Price-at-date snapshots and averages for a retailer URL."""
+    # For each period (7d, 30d, 90d):
+    #   SELECT * FROM scrape_results
+    #   WHERE retailer_url_id = ? AND created_at <= (now - period)
+    #   ORDER BY created_at DESC LIMIT 1
+    #
+    # This gives the most recent known price at or before the target date.
+    # Also compute: avg over 30d, avg over 90d, all-time avg
 ```
 
-### Pattern 4: Shared Playwright Browser Instance
+### API Integration: Extend Existing Detail Endpoint
 
-**What:** Single Playwright browser instance shared across all scrape jobs, with a new context/page per scrape.
-**Why:** Launching a browser is expensive (~1-2s). Reusing one browser and creating lightweight contexts per scrape is much faster.
-**When:** Application lifetime.
-**Example:**
+**Recommended:** Add wayback data to `GET /watch-queries/{id}` response. The detail handler already loops through retailer_urls fetching per-URL data. Adding wayback queries in that same loop avoids N+1 frontend requests.
+
+Do NOT create a separate `GET /retailer-urls/{id}/wayback` endpoint -- it would require one request per URL from the frontend.
+
+### New Schema Additions
+
 ```python
-# Each scrape gets a fresh context (isolated cookies, no state leaking)
-async def run_single_scrape(browser, url, extractor):
-    context = await browser.new_context()
-    page = await context.new_page()
-    try:
-        result = await extractor.extract(page, url)
-        return result
-    finally:
-        await context.close()
+class WaybackSnapshot(BaseModel):
+    period_label: str           # "7d", "30d", "90d"
+    price_cents: int | None     # null if no data that far back
+    snapshot_date: datetime | None
+    vs_current_cents: int | None   # current - snapshot
+    vs_current_pct: float | None
+
+class WaybackStats(BaseModel):
+    snapshots: list[WaybackSnapshot]
+    avg_30d_cents: int | None
+    avg_90d_cents: int | None
+    avg_all_time_cents: int | None
+    current_vs_avg_30d_pct: float | None  # positive = above average
 ```
 
-### Pattern 5: SQLite WAL Mode on Startup
+Add `wayback: WaybackStats | None` to `RetailerUrlWithLatest` (in `schemas/watch_query.py`).
 
-**What:** Enable WAL mode and set pragmas at connection time for better concurrency.
-**When:** Database initialization.
-**Example:**
+### Frontend Components
+
+| Component | New/Modified | Purpose |
+|-----------|-------------|---------|
+| `WaybackStats` | NEW | Display price comparison chips/badges per listing |
+| `QuerySheet` | MODIFIED | Embed WaybackStats in detail view per listing |
+| `PriceChart` | MODIFIED | Optionally show average reference lines |
+
+### Data Flow
+
+```
+Frontend: GET /watch-queries/{id}
+    |
+    v
+API: get_query() handler
+    |-- for each retailer_url:
+    |     |-- get_latest_scrape_result() (existing)
+    |     |-- get_wayback_stats()        (NEW)
+    |
+    v
+Response: WatchQueryDetailResponse with wayback per URL
+```
+
+## Feature 3: Multi-Product Fuzzy Matching
+
+### Design Decisions
+
+**When does matching happen?** Background job, not on-demand. Fuzzy matching across all product names is O(N^2). Even with modest data, doing this per API request adds latency and is wasteful since matches change only when new scrape results arrive.
+
+**What gets matched?** The latest `product_name` from `scrape_results` for each `retailer_url`, compared across ALL watch queries (not just within one).
+
+**Where are matches stored?** New tables. Pre-computed groups served from the API.
+
+### Matching Library: RapidFuzz
+
+Use `rapidfuzz` -- a C++ accelerated fuzzy matching library. It is 10-100x faster than `thefuzz` and uses MIT license (vs GPL). For product names, use `token_sort_ratio` which handles word reordering common across retailers (e.g., "Samsung Galaxy S24 256GB" vs "Galaxy S24 Samsung 256GB Black").
+
+**Confidence: HIGH** -- RapidFuzz is the established standard for Python fuzzy matching.
+
+### New Models
+
 ```python
-# database.py
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import event
+class ProductMatchGroup(Base):
+    __tablename__ = "product_match_groups"
 
-SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///./price_scraper.db"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    canonical_name: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )
 
-engine = create_async_engine(SQLALCHEMY_DATABASE_URL)
+class ProductMatchMember(Base):
+    __tablename__ = "product_match_members"
 
-@event.listens_for(engine.sync_engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
-
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("product_match_groups.id"))
+    retailer_url_id: Mapped[int] = mapped_column(
+        ForeignKey("retailer_urls.id"), unique=True
+    )
+    product_name: Mapped[str] = mapped_column(String(500))
+    similarity_score: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 ```
 
-## Anti-Patterns to Avoid
+**Design rationale:**
+- `retailer_url_id` has a unique constraint -- each URL belongs to at most one group
+- `canonical_name` is the longest/most descriptive name in the group (longer retailer names tend to be more specific)
+- `similarity_score` is stored for UI transparency and debugging
 
-### Anti-Pattern 1: Scraping in the Request Handler
+### New Service: `match_service.py`
 
-**What:** Running Playwright scraping synchronously inside an API route handler.
-**Why bad:** Scrapes take 5-30 seconds. This blocks the response and times out the client. Even async, it holds the connection open pointlessly.
-**Instead:** API endpoint triggers the scrape via the service layer, which can run it as a background task or scheduled job. Return 202 Accepted immediately. Push results via SSE when done.
+```python
+async def run_product_matching(session: AsyncSession) -> None:
+    """Recompute product match groups from latest scrape results."""
+    # 1. Get latest product_name for each retailer_url that has results
+    # 2. Normalize: lowercase, strip trademark symbols, trim whitespace
+    # 3. Pairwise comparison using rapidfuzz.fuzz.token_sort_ratio
+    # 4. Cluster with threshold >= 80 (configurable via app_settings)
+    # 5. Single-linkage clustering: if A~B and B~C, all three group together
+    # 6. Upsert: delete stale groups, create new, update changed
+```
 
-### Anti-Pattern 2: One Browser Per Scrape
+**When to run:** Trigger from the scheduler after scrape jobs complete. Use a debounce (at most once per 10 minutes via APScheduler's `max_instances=1` and `coalesce=True`) to avoid redundant runs when multiple queries scrape in quick succession.
 
-**What:** Calling `playwright.chromium.launch()` for every single scrape.
-**Why bad:** Browser launch takes 1-2 seconds and ~100MB RAM each time. With 20 watch queries, you are launching 20 browsers.
-**Instead:** Single browser instance at app startup, new `browser.new_context()` per scrape (milliseconds, isolated).
+### New API Endpoints
 
-### Anti-Pattern 3: Storing Prices as Floats
+```
+GET /product-matches
+  -> list[MatchGroupResponse]  (groups with members and latest prices)
 
-**What:** Using `REAL` / `FLOAT` column type for prices.
-**Why bad:** `19.99 + 0.01 = 20.000000000000004`. Comparison operators break. Accumulated rounding errors in historical data.
-**Instead:** Store as integer cents. Display formatting is a frontend concern.
+GET /product-matches/{group_id}
+  -> MatchGroupDetailResponse  (detailed group with price comparison)
+```
 
-### Anti-Pattern 4: Hardcoded Selectors Without Fallback
+### Frontend Components
 
-**What:** Single CSS selector per retailer with no fallback strategy.
-**Why bad:** Retailers change their DOM frequently. One class name change breaks all scraping for that site.
-**Instead:** Selector hierarchy: JSON-LD structured data first, then Open Graph meta tags, then multiple CSS selector candidates, then regex on page text as last resort.
+| Component | New/Modified | Purpose |
+|-----------|-------------|---------|
+| `ProductMatchesPage` | NEW | Top-level page at `/matches` route |
+| `MatchGroupCard` | NEW | Card showing group with cross-retailer price comparison |
+| `MatchBadge` | NEW | Badge on listings indicating "matched with N others" |
+| `QuerySheet` | MODIFIED | Show match indicator per listing row |
+| `Header` | MODIFIED | Add nav link to matches page |
 
-### Anti-Pattern 5: APScheduler in Multiple Workers
+### Data Flow
 
-**What:** Running FastAPI with multiple Uvicorn workers when APScheduler is in-process.
-**Why bad:** Each worker spawns its own scheduler. N workers = N duplicate scrapes for every job.
-**Instead:** Single Uvicorn worker (`--workers 1`). For a personal local app, this is perfectly adequate. If you ever need multiple workers, extract the scheduler to a separate process.
+```
+Scrape job completes
+    |
+    v (scheduler triggers, debounced)
+match_service.run_product_matching()
+    |-- Query latest product_name per retailer_url
+    |-- Normalize names
+    |-- Pairwise rapidfuzz.fuzz.token_sort_ratio
+    |-- Single-linkage cluster at >= 80% threshold
+    |-- Upsert product_match_groups + members
+    |
+    v
+Frontend: GET /product-matches
+    |
+    v
+Response: groups with members, latest prices, cross-retailer comparison
+```
 
-## Notification Delivery: SSE
+## Complete Integration Map
 
-**Recommendation: Server-Sent Events (SSE)** over WebSocket or polling.
+### New Files
 
-| Criterion | SSE | WebSocket | Polling |
-|-----------|-----|-----------|---------|
-| Direction | Server -> Client | Bidirectional | Client -> Server |
-| Complexity | Low | Medium | Low |
-| Auto-reconnect | Built-in | Manual | N/A |
-| HTTP/2 compatible | Yes | Separate protocol | Yes |
-| Use case fit | Alerts are server-push only | Overkill for this use case | Wasteful, delayed |
+| File | Layer | Feature |
+|------|-------|---------|
+| `backend/app/models/scrape_attempt.py` | Model | Health |
+| `backend/app/models/product_match.py` | Model | Matching |
+| `backend/app/repositories/scrape_health.py` | Repository | Health |
+| `backend/app/repositories/wayback.py` | Repository | Wayback |
+| `backend/app/repositories/product_match.py` | Repository | Matching |
+| `backend/app/services/match_service.py` | Service | Matching |
+| `backend/app/api/health.py` | API router | Health |
+| `backend/app/api/product_matches.py` | API router | Matching |
+| `backend/app/schemas/health.py` | Schema | Health |
+| `backend/app/schemas/wayback.py` | Schema | Wayback |
+| `backend/app/schemas/product_match.py` | Schema | Matching |
+| `frontend/src/pages/ScrapeHealthPage.tsx` | Page | Health |
+| `frontend/src/pages/ProductMatchesPage.tsx` | Page | Matching |
+| `frontend/src/components/health/HealthTable.tsx` | Component | Health |
+| `frontend/src/components/health/HealthBadge.tsx` | Component | Health |
+| `frontend/src/components/wayback/WaybackStats.tsx` | Component | Wayback |
+| `frontend/src/components/matches/MatchGroupCard.tsx` | Component | Matching |
 
-SSE is the right choice because:
-- All real-time data flows one direction (server to client): alert fired, scrape completed, scrape failed.
-- The browser's `EventSource` API handles reconnection automatically.
-- No need for a WebSocket library on the frontend.
-- The `sse-starlette` package integrates cleanly with FastAPI.
-- For a single-user local app, connection management is trivial (one connection).
+### Modified Files
+
+| File | Change | Feature |
+|------|--------|---------|
+| `backend/app/services/scrape_service.py` | Add scrape_attempt creation in `run_scrape_job` | Health |
+| `backend/app/services/scheduler.py` | Add match_service trigger after scrape | Matching |
+| `backend/app/api/watch_queries.py` | Add wayback stats to detail response | Wayback |
+| `backend/app/schemas/watch_query.py` | Add `wayback` field to `RetailerUrlWithLatest` | Wayback |
+| `backend/app/models/__init__.py` | Register new models | All |
+| `frontend/src/types/api.ts` | Add new response types | All |
+| `frontend/src/App.tsx` | Add `/health` and `/matches` routes | Health, Matching |
+| `frontend/src/components/layout/Header.tsx` | Add nav links | Health, Matching |
+| `frontend/src/components/query/QuerySheet.tsx` | Show wayback stats + match indicators | Wayback, Matching |
+| `frontend/src/components/query/ListingRow.tsx` | Show health indicator per URL | Health |
+
+### Database Migration
+
+Single migration adding three tables (all additive, no changes to existing tables):
+
+```sql
+CREATE TABLE scrape_attempts (
+    id INTEGER PRIMARY KEY,
+    retailer_url_id INTEGER NOT NULL REFERENCES retailer_urls(id),
+    scrape_job_id INTEGER NOT NULL REFERENCES scrape_jobs(id),
+    status VARCHAR(20) NOT NULL,
+    error_type VARCHAR(50),
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX ix_scrape_attempts_url_date ON scrape_attempts(retailer_url_id, created_at);
+
+CREATE TABLE product_match_groups (
+    id INTEGER PRIMARY KEY,
+    canonical_name VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE product_match_members (
+    id INTEGER PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES product_match_groups(id),
+    retailer_url_id INTEGER NOT NULL REFERENCES retailer_urls(id) UNIQUE,
+    product_name VARCHAR(500) NOT NULL,
+    similarity_score REAL NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX ix_product_match_members_group ON product_match_members(group_id);
+```
 
 ## Suggested Build Order
 
-Build order is driven by dependency chains. Each phase should produce something testable.
+### Phase 1: Scrape Health Dashboard
+
+**Why first:**
+- Zero dependency on other features
+- Introduces `scrape_attempts` which should start logging before more scrapes run untracked
+- Immediate operational value -- shows which URLs are broken
+- Informs Feature 3 -- health data reveals URLs with unreliable product names that would produce bad fuzzy matches
+
+### Phase 2: Wayback Price Comparisons
+
+**Why second:**
+- Zero dependency on Phase 1 or 3
+- No new tables -- pure read-only computation over existing data
+- Lowest complexity of the three features
+- Extends existing endpoint rather than adding new pages
+
+### Phase 3: Multi-Product Fuzzy Matching
+
+**Why last:**
+- Most complex: new background job, fuzzy algorithm, clustering logic, two new tables
+- Benefits from Phase 1 health data to identify unreliable URLs
+- Most likely to need iterative tuning (threshold, normalization rules)
+- Largest frontend surface area (new page, new components, modifications to existing views)
+
+### Dependency Diagram
 
 ```
-Phase 1: Data Foundation
-  - SQLAlchemy models + database.py + WAL pragma setup
-  - Alembic migrations infrastructure
-  - Repository layer (CRUD for all tables)
-  - Pydantic schemas
-  WHY FIRST: Everything else depends on being able to read/write data.
-
-Phase 2: Scraping Core
-  - BaseExtractor + one retailer extractor (Amazon or generic)
-  - Playwright browser manager (shared instance pattern)
-  - Scraping service (orchestrates: load URL -> extract -> store result)
-  - Test with a CLI script (no API needed yet)
-  WHY SECOND: The scraper is the product's core value. Validate it works
-  before building UI around it.
-
-Phase 3: API Layer
-  - FastAPI app skeleton + lifespan
-  - Watch query CRUD routes
-  - Scrape results routes
-  - Alerts routes
-  - On-demand scrape endpoint
-  WHY THIRD: REST API wraps the working scraping + data layer.
-
-Phase 4: Scheduling
-  - APScheduler setup + lifespan integration
-  - Job registration when watch query is created/updated
-  - Job removal when watch query is deleted/paused
-  - Restore jobs from DB on startup
-  WHY FOURTH: Scheduling depends on working API + scraping layers.
-
-Phase 5: Real-Time + Alerts
-  - SSE event manager
-  - Alert evaluation in scraping service (price <= threshold)
-  - SSE push on alert creation
-  - Alert CRUD routes (mark read, list history)
-  WHY FIFTH: Alerts depend on scraping pipeline being solid.
-
-Phase 6: Frontend
-  - React app scaffold + API client
-  - Dashboard (list watch queries + latest results)
-  - Watch query CRUD forms
-  - Price history table + chart
-  - SSE connection + alert toast/badge
-  WHY LAST: Frontend consumes all backend APIs. Building it last means
-  APIs are stable and tested.
-
-Phase 7: Polish + Additional Retailers
-  - Add BestBuy, Walmart extractors
-  - Error handling UX (retry indicators, failure states)
-  - README with setup + "add a retailer" guide
+Phase 1 (Health)  ──────> Phase 3 (Matching) benefits from health data
+                            ^
+Phase 2 (Wayback) ──────> | (independent, but smaller scope done first)
 ```
 
-**Dependency graph:**
-```
-Data Layer --> Scraping Core --> API Layer --> Scheduling --> Alerts/SSE --> Frontend
-                                                                             |
-                                                            Additional Retailers (parallel)
-```
+No hard dependencies between features. The ordering is about risk management and incremental value delivery.
 
-## Scalability Considerations
+## Anti-Patterns to Avoid
 
-This is a single-user local application. Scalability is not a primary concern, but the architecture should not paint itself into a corner.
+### Anti-Pattern 1: Storing Computed Health Stats in a Summary Table
 
-| Concern | Single user (v1) | If needs grow |
-|---------|-------------------|---------------|
-| Concurrent scrapes | Sequential or 2-3 parallel contexts | Playwright browser pool with semaphore |
-| Database size | SQLite handles millions of rows fine | Partition old scrape_results by date if > 1GB |
-| Scheduler | In-process APScheduler | Extract to separate process + Redis job store |
-| Frontend updates | Single SSE connection | Still fine with SSE for < 100 connections |
-| Multiple workers | Single Uvicorn worker | Separate scheduler process, then scale API workers |
+**What people do:** Create a `url_health_summary` table with pre-computed success_rate and consecutive_failures, updated after each scrape.
+**Why it's wrong:** For a personal tool with modest data, this adds write complexity and staleness risk. The summary drifts if an update is missed.
+**Do this instead:** Compute on-demand from `scrape_attempts`. SQLite aggregation over hundreds of rows is sub-millisecond.
+
+### Anti-Pattern 2: Running Fuzzy Matching in the API Request Path
+
+**What people do:** Compute matches on `GET /product-matches` by running pairwise fuzzy comparison.
+**Why it's wrong:** O(N^2) computation blocks the request. 100 URLs = 4,950 comparisons per request.
+**Do this instead:** Pre-compute matches in a background job, serve stored groups from the API.
+
+### Anti-Pattern 3: Adding Error Rows to scrape_results
+
+**What people do:** Add a `status` column to `scrape_results` and insert error rows with null prices.
+**Why it's wrong:** Pollutes every price query. The existing history, delta, average, and min-price queries all assume every row has a valid price. Every query would need `WHERE status = 'success'` guards.
+**Do this instead:** Separate `scrape_attempts` table. Success data stays in `scrape_results` (immutable prices). Operational data stays in `scrape_attempts`.
+
+### Anti-Pattern 4: Over-Normalizing Product Names
+
+**What people do:** Strip everything except alphanumeric characters before fuzzy matching.
+**Why it's wrong:** Removes meaningful differentiation. "iPhone 16 Pro 256GB" and "iPhone 16 128GB" would match too aggressively.
+**Do this instead:** Light normalization only (lowercase, trim whitespace, remove trademark symbols). Let the 80% similarity threshold handle the rest. Start conservative and tune.
+
+### Anti-Pattern 5: Separate Wayback API Endpoint Per URL
+
+**What people do:** Create `GET /retailer-urls/{id}/wayback` and make N requests from the frontend.
+**Why it's wrong:** N+1 request problem. A watch query with 5 URLs means 6 requests to load the detail view.
+**Do this instead:** Embed wayback stats in the existing `GET /watch-queries/{id}` response, computed in the same per-URL loop.
 
 ## Sources
 
-- [FastAPI Background Tasks](https://fastapi.tiangolo.com/tutorial/background-tasks/) - Official docs on background processing
-- [APScheduler User Guide (3.x)](https://apscheduler.readthedocs.io/en/3.x/userguide.html) - Scheduler configuration and job stores
-- [SQLAlchemy 2.0 SQLite Dialect](https://docs.sqlalchemy.org/en/20/dialects/sqlite.html) - SQLite-specific configuration including WAL
-- [FastAPI WebSockets](https://fastapi.tiangolo.com/advanced/websockets/) - Official WebSocket docs (used for comparison)
-- [FastAPI SQL Databases Tutorial](https://fastapi.tiangolo.com/tutorial/sql-databases/) - Official SQLAlchemy integration guide
-- [SSE with FastAPI - Medium](https://medium.com/@inandelibas/real-time-notifications-in-python-using-sse-with-fastapi-1c8c54746eb7) - SSE implementation patterns (MEDIUM confidence)
-- [APScheduler + FastAPI Integration - Medium](https://rajansahu713.medium.com/implementing-background-job-scheduling-in-fastapi-with-apscheduler-6f5fdabf3186) - Lifespan integration pattern (MEDIUM confidence)
-- [SQLite Concurrent Writes](https://tenthousandmeters.com/blog/sqlite-concurrent-writes-and-database-is-locked-errors/) - WAL mode and locking behavior
-- [WebSocket vs SSE vs Polling 2025](https://potapov.me/en/make/websocket-sse-longpolling-realtime) - Real-time protocol comparison (MEDIUM confidence)
-- [FastAPI Best Practices - GitHub](https://github.com/zhanymkanov/fastapi-best-practices) - Project structure conventions
-- [Zyte Scraping Architecture](https://www.zyte.com/learn/architecting-a-web-scraping-solution/) - Scraping system design patterns
-- [Price Scraping Patterns - DEV](https://dev.to/hasdata_com/use-these-python-patterns-for-price-scraping-a2d) - Retailer extraction strategies (MEDIUM confidence)
+- Existing codebase analysis: models, repositories, services, API endpoints, schemas (all files read directly)
+- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- fuzzy matching library, performance benchmarks
+- [RapidFuzz documentation](https://rapidfuzz.github.io/RapidFuzz/) -- API reference for token_sort_ratio
+
+---
+*Architecture research for: Price Tracker v1.1 feature integration*
+*Researched: 2026-03-22*

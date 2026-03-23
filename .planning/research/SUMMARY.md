@@ -1,212 +1,188 @@
 # Project Research Summary
 
-**Project:** Price Scraper
-**Domain:** Personal price tracking / scraping web application
-**Researched:** 2026-03-18
+**Project:** Price Tracker v1.1
+**Domain:** Scrape health monitoring, wayback price comparisons, multi-product fuzzy matching
+**Researched:** 2026-03-22
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This is a single-user personal price tracking tool that monitors retailer product pages, stores historical price data, and alerts when prices drop below user-defined thresholds. The expert approach is a single-process Python monolith: FastAPI (async) serving a REST API and React SPA, APScheduler running in-process for background scraping jobs, SQLite for storage, and Playwright for headless browser automation. This stack is well-validated, eliminates external infrastructure dependencies (no Redis, no Celery, no separate broker), and is appropriate for the single-user, local-machine use case.
+Price Tracker v1.1 extends a working v1.0 foundation with three independent features that each address a real operational gap. The codebase already has everything needed for two of the three features: scrape health metrics can be derived from existing `ScrapeJob` and `ScrapeResult` data with only a new `scrape_attempts` table added; wayback price comparisons require zero schema changes, only new repository queries on `scrape_results`. The third feature — fuzzy product matching — is the only one that adds meaningful new complexity, requiring one new pip dependency (`rapidfuzz`), two new tables, and a background matching service. The overall stack is intentionally minimal: `rapidfuzz>=3.12.0` is the single new dependency and no new frontend npm packages are required.
 
-The recommended approach centers on a strict layered architecture: routers call services, services orchestrate scrapers, scrapers write to the data layer — with no cross-layer shortcuts. The scraping component is the highest-risk element of the product and must be designed first. Anti-bot systems on major retailers (Amazon, Walmart, Best Buy) are the single biggest threat to the product's core value proposition; a scraper that gets blocked silently is worse than no scraper at all. The data layer must use Alembic migrations and SQLite WAL mode from day one, because schema evolution is certain and SQLite locking issues under concurrent read/write are well-documented.
+The recommended build order is health first, wayback second, fuzzy matching third. Health must come first because the `scrape_attempts` schema migration activates per-URL tracking for all future scrapes — every day without it is lost observability data. Wayback is second because it is pure read-only computation on existing data with no schema changes, making it the lowest-risk feature. Fuzzy matching comes last because it is the most complex feature, benefits from health data to identify URLs with noisy or unreliable product names, and requires the most iterative tuning of any component (matching threshold, title normalization rules). All three integrate cleanly into the existing FastAPI/SQLAlchemy/React layered architecture without requiring new infrastructure.
 
-The key risks are: (1) retailer anti-bot detection silently breaking scrapes — mitigated by stealth mode, per-retailer delay configuration, and a scrape health dashboard from the start; (2) Playwright memory leaks in the long-running process — mitigated by fresh browser contexts per scrape job, resource blocking, and context cleanup in finally blocks; (3) CSS selector breakage when retailers update their DOM — mitigated by a fallback selector hierarchy (JSON-LD first, then semantic attributes, then CSS, then regex) and the `price-parser` library for price text parsing. Building the scraping engine before the frontend means these risks are confronted and resolved before any UI is built around them.
+The primary risks are data quality assumptions that, if unchecked, produce misleading output. Health metrics silently break if built on parsed `error_message` strings rather than structured per-URL attempt records. Wayback comparisons mislead users when sparse scrape history is presented without proximity validation and sample counts. Fuzzy matching produces false positives when raw retailer titles (packed with noise tokens and variant suffixes) are compared without normalization. Each risk has a clear prevention strategy that is build-order-sensitive: the schema migration precedes health metrics, proximity validation precedes wayback UI display, and title normalization precedes any matching logic.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The entire stack carries HIGH confidence from authoritative sources. The backend is Python 3.12+ / FastAPI 0.135+ (which now has native SSE support, eliminating the need for the third-party `sse-starlette` package), SQLAlchemy 2.0 async with aiosqlite, Alembic for migrations, APScheduler 3.x (not 4.x — v4 is pre-release and API-unstable as of March 2026), and Playwright 1.58+ for browser automation. The frontend is React 19 / TypeScript / Vite 8 / TanStack Query / Tailwind CSS 4 / Recharts. This is a conventional, well-documented combination with no experimental dependencies.
+The v1.0 stack (FastAPI, SQLAlchemy async, Patchright, APScheduler, React 19, TanStack Query 5, Recharts, shadcn/ui) remains unchanged for v1.1. The only addition is `rapidfuzz>=3.12.0` for fuzzy product title matching — MIT license (ruling out `thefuzz`, which is GPL), pre-built C++ wheels for all platforms, and `token_sort_ratio`, `token_set_ratio`, and `cdist` batch operations that are exactly the scorers needed for product title comparison. All three features have been confirmed to require no new frontend npm dependencies: health UI uses the existing `<Table>` and `<Badge>` components, wayback stats are inline text using existing `format.ts` utilities, and match groups use existing `<Card>` components.
 
-Two critical version constraints: APScheduler must be pinned to 3.x (`<4.0`) — v4 has breaking API changes and is explicitly not production-ready. FastAPI 0.135+ is required for native SSE; older versions require the third-party `sse-starlette` package.
+Three new database tables are added via a single Alembic migration (all additive, no changes to existing tables): `scrape_attempts` (per-URL scrape outcomes), `product_match_groups` (clustered product groups), and `product_match_members` (group membership with similarity scores). Three composite indexes are recommended for query performance: `scrape_attempts(retailer_url_id, created_at)`, `scrape_results(retailer_url_id, created_at)`, and `scrape_results(created_at)`.
 
 **Core technologies:**
-- **Python 3.12+ / FastAPI 0.135+**: Async-native web framework with built-in SSE, Pydantic v2 integration, and excellent developer experience
-- **SQLAlchemy 2.0 + aiosqlite + Alembic**: The industry-standard ORM with async SQLite support and proper migration tooling; `expire_on_commit=False` is required for async session correctness
-- **APScheduler 3.11+ (AsyncIOScheduler)**: Embedded in-process scheduler, shares the FastAPI event loop, no external broker — pin strictly to `<4.0`
-- **Playwright 1.58+ (async API only)**: The only viable approach for JS-rendered retailer pages; sync API must never be used in a FastAPI context
-- **React 19 / Vite 8 / TanStack Query 5.90+**: Standard 2026 React stack; TanStack Query is purpose-built for server-state management (prices, alerts) and eliminates manual fetch/useEffect patterns
-- **Tailwind CSS 4.2+**: CSS-native config (no `tailwind.config.js`), 5x faster engine; implement dark mode from the start if using Tailwind — retrofitting it is painful
-- **Recharts 3.8+**: Declarative, React-native charting for price history line charts
+- `rapidfuzz>=3.12.0`: fuzzy product matching — only new dependency, MIT license, C++ core, 16x faster than `thefuzz`
+- SQLAlchemy aggregate queries on `scrape_attempts`: health metrics — query-time aggregation, no caching layer needed at personal-tool scale
+- Date-windowed SQLAlchemy queries on `scrape_results`: wayback stats — extends the existing `get_rolling_avg_price()` pattern with no new infrastructure
+- Alembic migration (single): adds `scrape_attempts`, `product_match_groups`, `product_match_members` — additive only
+- APScheduler (existing): debounced background matching job after scrape completion — `max_instances=1`, `coalesce=True`
 
 ### Expected Features
 
-The feature landscape is well-defined by comparison with existing price trackers (CamelCamelCamel, Keepa, self-hosted tools like PriceGhost and PriceBuddy). The multi-URL-per-watch-query capability (tracking the same product across Amazon, Walmart, Best Buy simultaneously) is the primary differentiator versus existing single-retailer tools.
+**Must have (v1.1 core — P1):**
+- Per-URL health status: success rate (last N attempts, not calendar window), last success timestamp, consecutive failure count, error type classification
+- Visual health indicators (red/yellow/green) on existing dashboard cards
+- Filterable/sortable health URL list at `/health` route
+- 30-day and 90-day price-ago comparisons with actual comparison date displayed (not just the label)
+- 30-day and 90-day average price with sample count shown alongside
+- Historical low/high display extending the existing all-time low badge
+- Good deal / bad deal indicator based on 90-day average comparison
+- Automatic fuzzy matching with confidence scores using RapidFuzz
+- Manual confirm/reject for match suggestions with persistence — mandatory because fuzzy matching always has false positives
+- Grouped cross-retailer price comparison view at `/matches` route
 
-**Must have (table stakes):**
-- Watch query CRUD (create, edit, pause, delete) with URL + price threshold — the data model everything else depends on
-- Multiple URLs per watch query — core differentiator; same product across all retailers
-- Headless browser scraping with scheduled background execution — the product's entire value proposition
-- Scrape failure handling with surfaced error status — silent failures are worse than visible ones
-- Append-only scrape result storage with timestamps — required for all history and delta features
-- Price delta calculation (up/down/unchanged from previous scrape)
-- On-demand "scrape now" trigger per query
-- Dashboard with all watch queries, latest prices, last scrape timestamp, scrape status
-- Drill-down view per query with price history line chart + table
-- Threshold line on chart and visual below-threshold indicators
-- Alert system: threshold comparison, in-app notification badge/toast, alert log, mark-read
-
-**Should have (differentiators):**
-- Multi-retailer lowest-price comparison highlighted on dashboard (already enabled by multi-URL data model — low additional effort)
-- Configurable schedule per query (6h, 12h, daily, weekly)
-- Price drop percentage display from historical peak
-- Sparkline on dashboard cards (at-a-glance trend without drill-down)
-- Dark mode — implement with Tailwind from the start; retrofitting costs more than building it in
-- Export price history to CSV
+**Should have (v1.1 if time permits — P2):**
+- Health trend sparklines using existing Recharts installation
+- Stale URL auto-detection with suggested actions in health dashboard
+- Best-price-across-retailers highlight in match group view (trivial once matching infrastructure exists)
+- Price percentile ranking (easy to add once price stats service exists)
 
 **Defer (v2+):**
-- Scrape selector configuration UI — hardcode per-retailer selectors initially, build UI later
-- Bulk import via CSV — nice-to-have after single-query flow is polished
-- Email/SMS notifications — design alert system with event/webhook pattern now so it can be bolted on later
-- Request throttling controls UI — implement throttling logic in code; expose UI controls later
-- Browser extension — out of scope; different product
-
-**Explicit anti-features (never build):**
-- Multi-user auth — single-user personal tool; adds complexity with zero value
-- Price prediction/forecasting — insufficient historical data at personal-tool scale
-- Proxy rotation / IP management — over-engineering for personal use; reasonable delays are sufficient
+- Health alerting when a URL degrades (requires notification infrastructure)
+- Match group price alerts (requires notification infrastructure)
+- Cross-query product matching (significantly higher false positive rate, major complexity increase)
+- Automatic URL discovery for matched products (requires search engine scraping or API access)
 
 ### Architecture Approach
 
-The recommended architecture is a single-process monolith with strict internal layering. FastAPI serves both the REST API and the React SPA static build. APScheduler runs in-process on the same event loop. SQLite in WAL mode is the sole data store. The six-table schema (watch_queries, retailer_urls, scrape_results, alerts, scrape_jobs, app_settings) covers the full domain. Prices are stored as integer cents to avoid floating-point issues — this is a hard requirement, not a preference.
+All three features integrate into the existing single-process layered monolith without structural changes. Each follows the established pattern: Alembic migration, new repository module, new or extended service, new API router or extended endpoint, new frontend page and components wired through TanStack Query. The one cross-cutting integration point is `scrape_service.run_scrape_job()`, which gains a `ScrapeAttempt` write in both the success and failure branches of its per-URL loop — approximately a 10-line change that activates all health tracking. Wayback stats are embedded in the existing `GET /watch-queries/{id}` response (not a separate endpoint per URL) to avoid N+1 frontend requests. Fuzzy matching runs as a debounced background task triggered post-scrape, never in the request path.
 
-The critical boundary rules are: routers never call scrapers directly (always via services), scrapers never import routers, the scheduler only calls service-layer functions, and the frontend never talks to the scheduler (on-demand scrapes go through REST). SSE (not WebSockets) is the correct choice for real-time notifications — communication is unidirectional (server to client only), SSE auto-reconnects in browsers, and FastAPI 0.135+ has native support. The SSE EventManager is an in-memory asyncio queue that fans out to connected clients when scrapes complete or alerts fire.
-
-**Major components:**
-1. **React Frontend** — UI rendering, charts (Recharts), SSE EventSource connection for real-time alerts, TanStack Query for all server state
-2. **API Layer (routers/)** — HTTP request handling, Pydantic validation, delegates to Service Layer
-3. **Service Layer (services/)** — Business logic: watch query CRUD, alert evaluation, price delta calculation, orchestrates scrapers
-4. **Scraping Service (scrapers/)** — Strategy pattern: BaseExtractor + per-retailer implementations (Amazon, BestBuy, Walmart, Generic fallback); shared Playwright browser instance with new context per scrape
-5. **Scheduler Layer** — APScheduler AsyncIOScheduler lifecycle in FastAPI lifespan; job registration/removal synced to watch query CRUD; restores jobs from DB on startup
-6. **SSE Event Manager (events/manager.py)** — In-memory asyncio queue, pub/sub between scraping service and connected browser clients
-7. **Data Layer (models/, repositories/)** — SQLAlchemy 2.0 async ORM, Alembic migrations, WAL mode pragmas on connection
+**Major components added:**
+1. `scrape_attempts` table + `scrape_health` repository + `GET /scrape-health` endpoint + `ScrapeHealthPage` — per-URL operational history and health metric aggregation
+2. `get_wayback_stats()` repository function embedded in watch query detail response + `WaybackStats` frontend component — price-at-date and rolling average computation on existing data
+3. `match_service.py` background job + `product_match_groups`/`product_match_members` tables + `GET /product-matches` endpoint + `ProductMatchesPage` — RapidFuzz clustering with user confirmation/rejection workflow
+4. Modified `scrape_service.run_scrape_job()` — writes `ScrapeAttempt` row per URL per job
+5. Modified `QuerySheet` — embeds wayback stats and match indicators in the existing detail view
 
 ### Critical Pitfalls
 
-1. **Retailer anti-bot detection silently breaks all scrapes** — Use `playwright-stealth` or `patchright` from the start; implement per-retailer delays (randomized 3-15s), fresh browser contexts per scrape, and a scrape health metric (success rate per retailer per day). Amazon has a ~2% baseline success rate for unprotected scrapers as of 2026.
+1. **No structured per-URL failure data** — Add `scrape_attempts` table and write a row in both the success and failure branches of `run_scrape_job`. Never parse `ScrapeJob.error_message` strings — the format is unstructured, lossy on failure type, and will silently break.
 
-2. **Playwright memory leaks crash the long-running process** — Never reuse browser contexts across scrape jobs; use `try/finally` to guarantee `context.close()` on every scrape; block unnecessary resources (images, CSS, fonts) to reduce memory pressure; limit concurrency to 2-3 pages maximum.
+2. **Calendar-window success rates produce incomparable metrics** — Compute success rate as `successes / total_attempts` scoped to the last N attempts per URL, not over a calendar window. URLs with different scrape schedules must produce comparable rates. Suppress percentage display for fewer than 5 attempts; show "2/3 successful" for small samples instead.
 
-3. **APScheduler lifecycle mismanagement duplicates scrape jobs** — Use `AsyncIOScheduler` (not `BackgroundScheduler`), start/stop it inside FastAPI's `lifespan` context manager, run with `--workers 1` only. Multiple Uvicorn workers = multiple schedulers = N duplicate scrapes.
+3. **Wayback "30 days ago" showing data from an unrelated date** — Always display the actual comparison date alongside any period label. Enforce a ±3-day proximity window; return null and show "No data" when no scrape falls within it. Show sample count with averages; refuse to compute averages under 3 data points.
 
-4. **SQLite "database is locked" under concurrent access** — Enable WAL mode and set `busy_timeout=5000` via SQLAlchemy event listener on every new connection. This must be done at database initialization, not retrofitted.
+4. **Fuzzy matching false positives from retailer title noise** — Normalize before comparing: lowercase, strip known noise tokens (Sponsored, Renewed, Bundle, Refurbished, variant suffixes), collapse whitespace, remove non-alphanumeric except hyphens. Use `token_set_ratio` not raw `ratio`. Start at 85-90% threshold. Require user confirmation for all suggestions; persist confirmed and dismissed pairs.
 
-5. **CSS selectors break silently when retailers update layouts** — Implement a fallback selector hierarchy: JSON-LD structured data first, Open Graph meta tags second, multiple CSS selector candidates third, regex on page text as last resort. Use the `price-parser` library for price text parsing. Store raw extracted text alongside parsed values for debugging.
+5. **Fuzzy matching runs in the scrape pipeline and blocks it** — Matching is O(N²). Run as an async background task after scrape completion, never synchronously. Use `cdist` for batch comparison and match only against the latest canonical `product_name` per URL, not all historical title variants.
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure (mirrors the dependency graph: Data → Scraping → API → Scheduling → Alerts/SSE → Frontend → Polish):
+Based on combined research, three primary phases in dependency and risk order:
 
-### Phase 1: Data Foundation
-**Rationale:** Everything depends on the ability to read and write data. Alembic must be set up before any application code so schema evolution has a migration path from day one. WAL mode and busy_timeout must be configured on the first connection, not retrofitted.
-**Delivers:** SQLAlchemy models for all 6 tables, Alembic migrations infrastructure, repository layer (CRUD for all tables), Pydantic schemas, WAL + busy_timeout pragmas on connection, integer-cents price storage
-**Addresses:** Watch query data model, scrape result storage, alert records, scrape job tracking
-**Avoids:** SQLite locking errors (Pitfall 4), no migration path (Pitfall 7), price float corruption (Pitfall 3 from architecture anti-patterns)
+### Phase 1: Scrape Health Dashboard
 
-### Phase 2: Scraping Core
-**Rationale:** The scraper is the product's entire value proposition. Validate it works — including anti-bot mitigations and memory management — before building any UI around it. A broken scraper discovered after the UI is built requires painful rework.
-**Delivers:** BaseExtractor + AmazonExtractor (first retailer), shared Playwright browser manager, scraping service (load URL → extract → store result), `playwright-stealth` or `patchright` integration, per-retailer delay configuration, fresh context per scrape with try/finally cleanup, resource blocking (images/CSS/fonts), `price-parser` integration, CLI test script to validate without API
-**Addresses:** Headless browser scraping, extract product name/price/URL, scrape failure handling, price delta calculation
-**Avoids:** Anti-bot blocking (Pitfall 1), memory leaks (Pitfall 2), sync Playwright in async context (Pitfall 8), price parsing corruption (Pitfall 6), selector breakage (Pitfall 5)
+**Rationale:** Must come first because the `scrape_attempts` schema migration activates per-URL tracking for all future scrapes. Every day without the migration is lost observability data. Health has zero dependency on the other two features, delivers immediate operational value (which URLs are broken right now), and informs Phase 3 by exposing which URLs have unreliable product names.
 
-### Phase 3: API Layer
-**Rationale:** REST API wraps the validated scraping and data layer. With working scraping and data persistence confirmed, the API surface is clear and stable.
-**Delivers:** FastAPI app skeleton with lifespan context, watch query CRUD endpoints, scrape results endpoints, alerts endpoints, on-demand scrape endpoint (POST /api/watch-queries/{id}/scrape returns 202), CORS configuration for React dev server
-**Addresses:** Watch query CRUD, on-demand scrape trigger, alert log/history endpoints
-**Avoids:** Scraping in request handlers (architecture anti-pattern 1)
+**Delivers:** `scrape_attempts` table migration with composite index, `scrape_health` repository (aggregate queries: success rate over last N attempts, last success, consecutive failures, last error type), `GET /scrape-health` API endpoint, `ScrapeHealthPage` at `/health`, `HealthTable` component (sortable, filterable), `HealthBadge` component (green/yellow/red), health indicator dot on existing dashboard cards, `Header` nav link.
 
-### Phase 4: Scheduling
-**Rationale:** Scheduling depends on working API and scraping layers. Job registration is tied to watch query lifecycle (create/update/delete/pause), which requires the API layer to exist.
-**Delivers:** APScheduler AsyncIOScheduler in FastAPI lifespan, job registration on watch query create/update, job removal on delete/pause, startup job restoration from DB, per-retailer request queue with rate limiting and jitter, exponential backoff on HTTP errors
-**Addresses:** Scheduled background scraping, configurable schedule per query (6h/12h/daily/weekly)
-**Avoids:** APScheduler lifecycle bugs (Pitfall 3), rate limiting/IP bans (Pitfall 9), duplicate jobs from multiple workers
+**Addresses (from FEATURES.md):** Per-URL health status, visual indicators, filterable URL list, error type classification.
 
-### Phase 5: Real-Time Alerts and SSE
-**Rationale:** Alert evaluation and real-time push depend on a solid scraping pipeline. This phase wires the end-to-end value loop: scrape → detect threshold breach → push notification.
-**Delivers:** SSE EventManager (asyncio queue pub/sub), alert evaluation in scraping service (price <= threshold creates Alert record), SSE push on alert creation, alert CRUD (mark read, list history, mark all read), scrape health metric (success rate per retailer), scrape status indicator per query
-**Addresses:** Alert fires when price <= threshold, in-app notification badge/toast, alert log/history, mark alert as read/dismissed, scrape status indicators
-**Avoids:** Frontend polling overload (Pitfall 10)
+**Avoids (from PITFALLS.md):** Pitfall 1 (parsed error strings), Pitfall 2 (calendar-window rates), Pitfall 6 (stale aggregate queries via composite index).
 
-### Phase 6: Frontend
-**Rationale:** Frontend consumes all backend APIs. Building it last means the API surface is stable, tested, and unlikely to change significantly. TanStack Query handles all server state; SSE EventSource handles real-time notifications.
-**Delivers:** React + Vite + TypeScript scaffold, API client (typed fetch wrappers), Dashboard (all watch queries, cards with latest price/delta/status/last scrape), watch query CRUD forms (create/edit/pause/delete), price history line chart + table with threshold line and time range filter, SSE EventSource connection for alert toast/badge, alert log view, multi-retailer lowest-price highlighting, dark mode (Tailwind — implement now, not later)
-**Addresses:** Dashboard overview, drill-down per query, price history chart, alert notifications, visual below-threshold indicators
-**Uses:** React 19, Vite 8, TanStack Query 5.90+, Tailwind CSS 4.2+, Recharts 3.8+, FastAPI native SSE
+**Research flag:** Standard patterns — FastAPI route + SQLAlchemy aggregation is well-documented. Skip research-phase.
 
-### Phase 7: Polish and Additional Retailers
-**Rationale:** Additional retailer extractors and UX polish are lower-risk and can be developed iteratively once the core loop is proven end-to-end.
-**Delivers:** BestBuy extractor, Walmart extractor, Generic fallback extractor (JSON-LD / Open Graph), sparkline on dashboard cards, price drop percentage from peak, export price history to CSV, error handling UX (retry indicators, failure states), URL canonicalization (strip tracking params, store canonical product IDs), page type detection before parsing (in-stock vs. out-of-stock vs. marketplace)
-**Addresses:** Multi-retailer support, differentiator features, selector resilience, URL stability
-**Avoids:** URL expiration/tracking param corruption (Pitfall 12), retailer page variant handling (Pitfall 11)
+### Phase 2: Wayback Price Comparisons
+
+**Rationale:** Independent of Phase 1 and Phase 3. Zero schema changes — only new repository query functions and API schema extensions. The lowest-risk and lowest-complexity of the three features. Completing it before fuzzy matching ensures cross-retailer price context is already available when match group views are introduced.
+
+**Delivers:** `get_wayback_stats()` repository function (price at ±3-day proximity window for 7d/30d/90d, rolling averages with sample counts), `WaybackStats` Pydantic schema with actual comparison dates and sample counts, `wayback` field embedded in existing `GET /watch-queries/{id}` response, `WaybackStats` frontend component in `QuerySheet`, good deal/bad deal badge.
+
+**Addresses (from FEATURES.md):** 30d/90d price-ago comparisons, 30d/90d averages, historical low/high display, good deal indicator.
+
+**Avoids (from PITFALLS.md):** Pitfall 3 (stale wayback labels — proximity window and actual date built from day one), misleading averages (sample count in API response, minimum 3-point floor enforced).
+
+**Research flag:** Standard patterns — date-windowed SQL aggregation with an existing precedent in `get_rolling_avg_price()`. Skip research-phase.
+
+### Phase 3: Multi-Product Fuzzy Matching
+
+**Rationale:** Comes last because it is the most complex feature. It benefits from Phase 1 health data (excluding URLs with unreliable product names from matching), has the longest tail (new pip dependency, two new tables, background service, clustering logic, the most frontend surface area), and is the only feature requiring iterative tuning that is best done with real production data already accumulated from Phases 1 and 2.
+
+**Delivers:** `rapidfuzz>=3.12.0` dependency in `pyproject.toml`, `product_match_groups` and `product_match_members` migration, `match_service.py` background job (title normalization pipeline, `cdist` batch comparison, single-linkage clustering at configurable threshold, debounced APScheduler trigger), `GET /product-matches` and `GET /product-matches/{id}` endpoints, `ProductMatchesPage` at `/matches`, `MatchGroupCard` component (cross-retailer price comparison), match indicators in `QuerySheet` and `ListingRow`, confirm/reject workflow with persistence, dismissed pairs excluded from future runs.
+
+**Addresses (from FEATURES.md):** Automatic fuzzy matching with confidence scores, manual confirm/reject, grouped comparison view.
+
+**Avoids (from PITFALLS.md):** Pitfall 4 (false positives — normalization pipeline built and tested before matching logic), Pitfall 5 (quadratic blocking — async background task, `cdist`, debounced).
+
+**Research flag:** Title normalization strategy needs empirical validation. Before writing the normalization pipeline, query 20-30 real `product_name` values from the live database across all 5 supported retailers (Amazon, Walmart, Best Buy, Newegg, Micro Center) and manually test threshold candidates. This is a short spike, not full research-phase, but should precede normalization code.
+
+### Phase 4: Polish and P2 Features
+
+**Rationale:** Best-price-across-retailers highlight, health trend sparklines, and stale URL auto-detection are low-complexity additions that build on Phase 1-3 infrastructure. Group them into a polish phase rather than bloating earlier phases.
+
+**Delivers:** Best-price highlight in `MatchGroupCard`, health trend sparklines using existing Recharts, stale URL flagging with suggested actions in `ScrapeHealthPage`.
+
+**Research flag:** Standard patterns — all additions use already-installed libraries. Skip research-phase.
 
 ### Phase Ordering Rationale
 
-- Data before everything because every other layer depends on being able to read/write data, and migration tooling must exist before schema evolution begins
-- Scraping before API because the scraper is the highest-risk component; discovering anti-bot issues or memory problems at Phase 2 is recoverable; discovering them at Phase 6 is not
-- API before scheduling because job registration is coupled to watch query lifecycle; the CRUD endpoints must exist before scheduler integration can be implemented correctly
-- Scheduling before alerts because alert evaluation happens inside the scraping flow, which the scheduler triggers
-- Frontend last because it consumes all backend APIs; building it against stable, tested endpoints means the frontend reflects the actual API, not aspirational design
+- Health first because the `scrape_attempts` migration is time-sensitive — lost tracking data cannot be recovered retroactively.
+- Wayback second because it is zero-risk (read-only, no schema changes) and enriches the query detail view that fuzzy matching groups will later reference.
+- Fuzzy matching last because it is the only feature requiring empirical tuning with real data, and it has the most integration surface (new page, new background job, modifications to existing views).
+- No phase has a hard dependency that blocks parallel work, but this order minimizes rework: health data informs which URLs to exclude from matching, and wayback context enriches match group display.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 2 (Scraping Core):** Anti-bot bypass techniques are a moving target — specific `playwright-stealth` vs. `patchright` selection, Amazon-specific selector strategies, and stealth configuration may need targeted research at planning time to reflect the current 2026 state of anti-bot systems
-- **Phase 2 (Scraping Core):** Retailer-specific CSS selector sets for Amazon/BestBuy/Walmart require empirical testing against live pages; selectors documented in research may already be stale
+Phases needing deeper research during planning:
+- **Phase 3 (Fuzzy Matching):** Title normalization strategy — recommend a brief empirical spike reading actual scraped `product_name` values from the live database across all 5 retailers before writing the normalization pipeline. The threshold (85 vs 90) should be confirmed against real data, not guessed.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 1 (Data Foundation):** SQLAlchemy 2.0 async + Alembic + SQLite WAL is a well-documented, stable pattern with official documentation and code examples already in STACK.md and ARCHITECTURE.md
-- **Phase 3 (API Layer):** FastAPI CRUD endpoints and dependency injection are thoroughly documented; lifespan context manager pattern is explicitly provided in STACK.md
-- **Phase 4 (Scheduling):** APScheduler 3.x + FastAPI lifespan integration pattern is explicitly documented with working code examples in both STACK.md and ARCHITECTURE.md
-- **Phase 5 (Alerts/SSE):** FastAPI native SSE + asyncio queue EventManager pattern is fully specified in ARCHITECTURE.md
-- **Phase 6 (Frontend):** TanStack Query + Vite + Tailwind 4 is conventional 2026 React stack with extensive documentation
+- **Phase 1 (Health):** FastAPI + SQLAlchemy aggregate queries + indexed table — established pattern, well-documented.
+- **Phase 2 (Wayback):** Date-windowed SQL aggregation with an existing precedent in `get_rolling_avg_price()`. No novel patterns.
+- **Phase 4 (Polish):** All additions use already-installed libraries (Recharts, shadcn/ui).
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All technologies verified against official PyPI, release notes, and documentation. Version numbers confirmed. APScheduler 4.x instability explicitly confirmed by `fastapi-apscheduler4` package warnings. |
-| Features | HIGH | Grounded in feature comparison of CamelCamelCamel, Keepa, PriceGhost, PriceBuddy, and multiple market overview sources. Feature dependencies charted explicitly. |
-| Architecture | HIGH | Layer boundaries, data flow, schema design, and code patterns are all explicitly documented with working code examples. Confirmed against FastAPI best practices repo. |
-| Pitfalls | HIGH | All 5 critical pitfalls confirmed by multiple independent authoritative sources. Playwright memory leak confirmed by GitHub issues. Amazon 2% success rate confirmed by multiple 2026-dated sources. SQLite WAL mode confirmed by Charles Leifer and SkyPilot. |
+| Stack | HIGH | Existing stack validated in v1.0. `rapidfuzz` is the standard production Python fuzzy matching library; MIT license, C++ performance, and `cdist` API confirmed against official documentation. Single new dependency conclusion is high confidence. |
+| Features | MEDIUM-HIGH | Table stakes and P1 features well-defined by competitor analysis (CamelCamelCamel, Keepa, ScrapeOps). The exact threshold and normalization rules for fuzzy matching require empirical validation against real scraped titles — that detail is MEDIUM confidence. |
+| Architecture | HIGH | Based on direct codebase analysis of existing models, services, repositories, and API patterns. All integration points confirmed in code. No novel architectural patterns required — all three features follow established layer conventions. |
+| Pitfalls | HIGH | All critical pitfalls derived from direct codebase analysis plus domain research. The `error_message` concatenation issue is directly observable in current `scrape_service.py`. The O(N²) matching pitfall is a well-documented class of problem with standard prevention strategies. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Actual retailer CSS selectors:** The selector fallback strategy is well-defined, but the specific CSS selectors for Amazon/BestBuy/Walmart price elements must be validated against live pages at implementation time. Retailer frontends change frequently; selectors in any research document may be outdated within weeks.
-- **`playwright-stealth` vs. `patchright` selection:** Both are recommended for anti-bot mitigation; the specific choice and configuration depends on current maintenance status and effectiveness as of implementation time. `patchright` is described as the newer fork. Validate before Phase 2.
-- **Amazon Product Advertising API viability:** Research notes the PA API as a lower-detection alternative to direct scraping for Amazon. API access requires affiliate status. This is worth evaluating if direct Amazon scraping proves consistently blocked.
-- **SQLite data volume limits:** For a long-running personal tool accumulating scrape results across many watch queries, the research notes that SQLite handles millions of rows fine but recommends partitioning `scrape_results` by date if the DB exceeds 1GB. No specific timeline projection was made; monitor in practice.
+- **Fuzzy matching threshold:** The 85-90% recommendation is based on general domain guidance, not empirical testing against actual scraped titles in this database. During Phase 3 planning, query real `product_name` values from the live database and manually test threshold candidates before writing matching code.
+- **`scrape_attempts` backfill decision:** The Phase 1 migration adds the table with no historical data. The pitfall research recommends a backfill migration that derives past failures from `scrape_jobs` where a URL has no corresponding `scrape_results` row. Decide in Phase 1 planning whether to implement backfill (richer immediate history) or accept that health metrics start fresh from migration date (simpler migration).
+- **Wayback proximity window:** The ±3-day proximity window is a recommendation. If the user's scrape schedule is weekly, ±3 days would produce very sparse comparisons. During Phase 2 planning, check the actual scrape frequency distribution in the database and set the window accordingly (reasonable rule: proximity window = 2× scrape interval).
+- **Match confirmation UX flow:** The research confirms that human-in-the-loop is mandatory for match confirmation, but the specific UX pattern (modal, inline action buttons, dedicated review queue page) is unresolved. Decide during Phase 3 planning before building the match review UI.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [FastAPI Release Notes](https://fastapi.tiangolo.com/release-notes/) — Native SSE support in 0.135+, version verification
-- [FastAPI SSE Documentation](https://fastapi.tiangolo.com/tutorial/server-sent-events/) — Native SSE API
-- [SQLAlchemy 2.0 Async Documentation](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html) — Async session patterns, expire_on_commit
-- [Alembic Documentation](https://alembic.sqlalchemy.org/) — Migration tooling
-- [APScheduler PyPI](https://pypi.org/project/APScheduler/) — v3.11.2 stable, v4 not production-ready
-- [fastapi-apscheduler4 PyPI](https://pypi.org/project/fastapi-apscheduler4/) — Explicit v4 production-readiness warning
-- [Playwright Python Release Notes](https://playwright.dev/python/docs/release-notes) — v1.58
-- [Vite 8.0 Announcement](https://vite.dev/blog/announcing-vite8) — Vite 8 with Rolldown/Oxc
-- [Playwright Memory Issues #6319, #15400, #286](https://github.com/microsoft/playwright/issues/6319) — Memory leak confirmation
-- [Multi-threaded SQLite - Charles Leifer](https://charlesleifer.com/blog/multi-threaded-sqlite-without-the-operationalerrors/) — WAL mode and locking
-- [price-parser - PyPI](https://pypi.org/project/price-parser/) — Price text parsing library
-- [FastAPI Best Practices - GitHub](https://github.com/zhanymkanov/fastapi-best-practices) — Project structure
+
+- Existing codebase — `backend/app/models/`, `services/scrape_service.py`, `repositories/scrape_result.py`, `scrapers/base.py`, `frontend/src/components/`, `frontend/src/lib/format.ts` — direct analysis confirming data gaps and integration points
+- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) — MIT license confirmed, C++ core, API documentation
+- [RapidFuzz documentation](https://rapidfuzz.github.io/RapidFuzz/) — `token_sort_ratio`, `token_set_ratio`, `cdist` API confirmed current
+- [shadcn/ui Table docs](https://ui.shadcn.com/docs/components/radix/table) — confirmed already installed at `frontend/src/components/ui/table.tsx`
 
 ### Secondary (MEDIUM confidence)
-- [The 2026 Amazon Scraping Wars - Medium](https://medium.com/@pangolin.spg/the-2026-amazon-scraping-wars-a-technical-deep-dive-into-anti-bot-combat-b77503fe2418) — Amazon 2% success rate baseline, ML scoring
-- [CamelCamelCamel vs Keepa](https://goaura.com/blog/camelcamelcamel-vs-keepa) — Feature comparison, market analysis
-- [WebSocket vs SSE vs Polling 2025](https://potapov.me/en/make/websocket-sse-longpolling-realtime) — Protocol comparison
-- [SQLite Concurrent Writes - SkyPilot](https://blog.skypilot.co/abusing-sqlite-to-handle-concurrency/) — WAL behavior
-- [Zyte Scraping Architecture](https://www.zyte.com/learn/architecting-a-web-scraping-solution/) — Scraping system design
-- [Oxylabs Walmart Scraping Guide 2026](https://oxylabs.io/blog/how-to-scrape-walmart-data) — Walmart anti-bot systems
+
+- [ScrapeOps Monitoring](https://scrapeops.io/monitoring-scheduling/) — scrape health dashboard metrics and patterns
+- [CamelCamelCamel vs Keepa](https://goaura.com/blog/camelcamelcamel-vs-keepa) — competitor feature comparison
+- [Amazon Price History: 30 vs 90 Days](https://taskmonkey.ai/blog/amazon-price-tracker/amazon-price-history-30-vs-90-days) — time window analysis confirming 30d/90d as industry standard
+- [Fuzzy Matching 101 - Data Ladder](https://dataladder.com/fuzzy-matching-101/) — threshold selection guidance, false positive patterns
+- [2025 Fuzzy Matching Benchmarks](https://similarity-api.com/blog/speed-benchmarks) — `rapidfuzz` 40% faster than `thefuzz` confirmed
+- [SQLite performance tuning - phiresky](https://phiresky.github.io/blog/2020/sqlite-performance-tuning/) — composite index strategy, aggregate query optimization
 
 ### Tertiary (LOW confidence)
-- [SSE with FastAPI - Medium](https://medium.com/@inandelibas/real-time-notifications-in-python-using-sse-with-fastapi-1c8c54746eb7) — SSE implementation patterns (pre-native-SSE article; validate against official docs)
-- [Price Scraping Patterns - DEV](https://dev.to/hasdata_com/use-these-python-patterns-for-price-scraping-a2d) — Retailer extraction strategies (validate CSS selectors against live pages)
+
+- [How LLMs Fail on Product Identity](https://blog.affiliate.com/how-llms-fail-on-product-identity-and-how-to-fix-it-with-barcodes-mpns-and-deduplication-rules/) — used to justify avoiding LLM-based matching; directional support for RapidFuzz approach
+- [Walmart Product Matching](https://medium.com/walmartglobaltech/product-matching-in-ecommerce-4f19b6aebaca) — e-commerce matching patterns at enterprise scale (directional only — different scale from this tool)
 
 ---
-*Research completed: 2026-03-18*
+*Research completed: 2026-03-22*
 *Ready for roadmap: yes*
