@@ -47,13 +47,46 @@
 - [x] **UI-01**: Within a watch query's results, the listing with the lowest current price is highlighted across retailer URLs
 - [x] **UI-02**: Application supports dark mode
 
-## v1.1 Requirements (Phase 7 additions)
+## v1.0 Phase 7 Additions
 
 ### Alert Enhancements
 
 - [x] **ALERT-05**: System triggers an alert when a scraped price drops by a configurable percentage (e.g., 10%) below the rolling 30-day average price for that listing — configurable per watch query, evaluated in addition to the absolute threshold check
 - [x] **ALERT-06**: QueryCard displays an "all-time low" badge when the current lowest price across all retailers is the lowest price ever recorded for that watch query
 - [x] **ALERT-07**: Alert cooldown prevents duplicate alerts from firing within a configurable time window (default 24h) when price fluctuates around a threshold — configurable per watch query
+
+## Milestone v1.1 Requirements
+
+**Defined:** 2026-03-22
+**Goal:** Make the scraper smarter, more observable, and better at surfacing price context.
+
+### Scrape Health
+
+- [ ] **HEALTH-01**: User can view a health dashboard page listing all retailer URLs with per-URL success rate (last N attempts), last successful scrape timestamp, consecutive failure count, and last error type
+- [ ] **HEALTH-02**: Retailer URLs are visually categorized as healthy (green), degraded (yellow), or failing (red) based on recent scrape outcomes
+- [ ] **HEALTH-03**: User can sort and filter the health URL list by status, watch query, and last success date
+- [ ] **HEALTH-04**: Dashboard query cards show a health status indicator for each URL at a glance
+
+### Wayback Price Comparisons
+
+- [ ] **WAYBACK-01**: Watch query detail view shows price 30 days ago and 90 days ago for each listing, with the actual comparison date displayed alongside the label (not just the period label)
+- [ ] **WAYBACK-02**: Watch query detail view shows 30-day and 90-day rolling average prices with sample counts; averages are suppressed when fewer than 3 data points exist in the window
+- [ ] **WAYBACK-03**: Each listing shows a good deal / bad deal indicator based on whether the current price is below the 90-day rolling average
+- [ ] **WAYBACK-04**: Historical all-time high price is displayed alongside the existing all-time low
+
+### Fuzzy Matching
+
+- [ ] **MATCH-01**: System automatically detects when multiple retailer URLs resolve to the same product using fuzzy title matching and groups them as match candidates
+- [ ] **MATCH-02**: User can review match suggestions and confirm or reject each group; confirmed and rejected decisions are persisted and respected in future matching runs
+- [ ] **MATCH-03**: User can view confirmed match groups showing matched listings side-by-side with current prices, last scrape timestamps, and links to each listing's price history
+- [ ] **MATCH-04**: Fuzzy matching runs as a background job after scrape completion and does not block the scrape pipeline
+
+### Polish (P2)
+
+- [ ] **POLISH-01**: Scrape health dashboard shows a sparkline of success rate over time for each retailer URL
+- [ ] **POLISH-02**: Health dashboard flags URLs that have not had a successful scrape within a configurable staleness window, with suggested actions (remove, retry, investigate)
+- [ ] **POLISH-03**: In a confirmed match group, the retailer URL with the current lowest price is highlighted
+- [ ] **POLISH-04**: Each listing in the price history view shows the current price's percentile rank within its own scrape history (e.g., "cheaper than 85% of recorded prices")
 
 ## v2 Requirements
 
@@ -117,16 +150,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-04 | Phase 5 | Complete |
 | UI-01 | Phase 5 | Complete |
 | UI-02 | Phase 6 | Complete |
-| ALERT-05 | Phase 7 | Planned |
-| ALERT-06 | Phase 7 | Planned |
-| ALERT-07 | Phase 7 | Planned |
+| ALERT-05 | Phase 7 | Complete |
+| ALERT-06 | Phase 7 | Complete |
+| ALERT-07 | Phase 7 | Complete |
+| HEALTH-01 | Phase 8 | Pending |
+| HEALTH-02 | Phase 8 | Pending |
+| HEALTH-03 | Phase 8 | Pending |
+| HEALTH-04 | Phase 8 | Pending |
+| WAYBACK-01 | Phase 9 | Pending |
+| WAYBACK-02 | Phase 9 | Pending |
+| WAYBACK-03 | Phase 9 | Pending |
+| WAYBACK-04 | Phase 9 | Pending |
+| MATCH-01 | Phase 10 | Pending |
+| MATCH-02 | Phase 10 | Pending |
+| MATCH-03 | Phase 10 | Pending |
+| MATCH-04 | Phase 10 | Pending |
+| POLISH-01 | Phase 11 | Pending |
+| POLISH-02 | Phase 11 | Pending |
+| POLISH-03 | Phase 11 | Pending |
+| POLISH-04 | Phase 11 | Pending |
 
 **Coverage:**
-- v1 requirements: 24 total
-- v1.1 requirements: 3 total (Phase 7)
-- Mapped to phases: 27
-- Unmapped: 0
+- v1.0 requirements: 27 total — all complete
+- v1.1 requirements: 16 total (Phases 8–11)
+- Mapped to phases: 43
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after roadmap creation*
+*Last updated: 2026-03-22 after v1.1 milestone start*
