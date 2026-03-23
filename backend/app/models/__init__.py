@@ -5,6 +5,7 @@ from app.models.scrape_result import ScrapeResult
 from app.models.scrape_job import ScrapeJob
 from app.models.alert import Alert
 from app.models.app_settings import AppSettings
+from app.models.scrape_url_attempt import ScrapeUrlAttempt
 
 __all__ = [
     "Base",
@@ -14,4 +15,5 @@ __all__ = [
     "ScrapeJob",
     "Alert",
     "AppSettings",
+    "ScrapeUrlAttempt",
 ]

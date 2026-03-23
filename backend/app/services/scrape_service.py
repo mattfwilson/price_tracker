@@ -18,6 +18,7 @@ from app.repositories.scrape_result import (
     get_latest_scrape_result,
     update_scrape_job,
 )
+from app.repositories.scrape_url_attempt import create_scrape_url_attempt
 from app.scrapers.base import FailureType, ScrapeData, ScrapeError
 from app.scrapers.browser import BrowserManager
 from app.scrapers.registry import get_extractor
@@ -90,8 +91,33 @@ async def run_scrape_job(
                 listing_url=data.listing_url,
                 retailer_name=data.retailer_name,
             )
+            await create_scrape_url_attempt(
+                session,
+                retailer_url_id=retailer_url.id,
+                is_success=True,
+                error_type=None,
+                error_message=None,
+            )
             successes += 1
-        except (ScrapeError, Exception) as e:
+        except ScrapeError as e:
+            await create_scrape_url_attempt(
+                session,
+                retailer_url_id=retailer_url.id,
+                is_success=False,
+                error_type=e.failure_type.value,
+                error_message=e.message,
+            )
+            failures += 1
+            error_messages.append(f"{retailer_url.url}: {e}\n")
+            logger.warning("Scrape failed for %s: %s", retailer_url.url, e)
+        except Exception as e:
+            await create_scrape_url_attempt(
+                session,
+                retailer_url_id=retailer_url.id,
+                is_success=False,
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
             failures += 1
             error_messages.append(f"{retailer_url.url}: {e}\n")
             logger.warning("Scrape failed for %s: %s", retailer_url.url, e)
