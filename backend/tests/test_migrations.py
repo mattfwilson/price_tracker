@@ -31,7 +31,7 @@ def migrated_db(tmp_path, monkeypatch):
 
 
 def test_migration_creates_all_tables(migrated_db):
-    """Alembic upgrade head must create exactly 6 non-alembic tables."""
+    """Alembic upgrade head must create exactly 7 non-alembic tables."""
     conn = sqlite3.connect(str(migrated_db))
     tables = sorted(
         r[0]
@@ -47,6 +47,7 @@ def test_migration_creates_all_tables(migrated_db):
         "retailer_urls",
         "scrape_jobs",
         "scrape_results",
+        "scrape_url_attempts",
         "watch_queries",
     ])
     assert tables == expected, f"Expected {expected}, got {tables}"
