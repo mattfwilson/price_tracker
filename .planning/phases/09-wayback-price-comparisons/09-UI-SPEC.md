@@ -50,9 +50,8 @@ Exceptions: none. Phase 9 adds a single sub-row inside an existing component. Al
 | Body | 14px | 400 (regular) | 1.5 | `text-sm` |
 | Label (stats row) | 12px | 400 (regular) | 1.5 | `text-xs` |
 | Heading | 20px | 600 (semibold) | 1.2 | `text-xl font-semibold` |
-| Price (existing) | 18px | 700 (bold) | 1.2 | `text-lg font-bold font-heading` |
 
-Phase 9 new elements use only `text-xs` (12px) at weight 400. This matches the "No scrape data yet" secondary text already in ListingRow.
+Phase 9 new elements use only `text-xs` (12px) at weight 400. This matches the "No scrape data yet" secondary text already in ListingRow. The existing price display (`text-lg font-bold font-heading`) is not modified by this phase and is therefore excluded from this contract.
 
 ---
 
@@ -127,7 +126,7 @@ The stats row appears directly below the existing price/delta/badge line inside 
         {90d: $53.49 (Dec 23)}  {separator}
         {avg $50.12 (18 pts)}   {DealBadge}
       </div>
-      <div mt-0.5 flex items-center gap-x-2 text-xs text-muted-foreground>
+      <div mt-1 flex items-center gap-x-2 text-xs text-muted-foreground>
         {Low: $42.00}  {separator}  {High: $67.99}
       </div>
     </div>
@@ -160,7 +159,7 @@ Source: D-01, D-03, D-05 from CONTEXT.md.
 | Top margin (stats row below price line) | 4px | `mt-1` |
 | Gap between segments (horizontal) | 8px | `gap-x-2` |
 | Dot separator margin | 8px right of preceding segment (built into gap) | Rendered as `<span>` with content " · " |
-| Top margin (all-time extremes sub-row) | 2px | `mt-0.5` |
+| Top margin (all-time extremes sub-row) | 4px | `mt-1` |
 
 ### Loading Skeleton
 
