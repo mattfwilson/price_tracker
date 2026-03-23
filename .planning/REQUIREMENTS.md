@@ -62,10 +62,10 @@
 
 ### Scrape Health
 
-- [ ] **HEALTH-01**: User can view a health dashboard page listing all retailer URLs with per-URL success rate (last N attempts), last successful scrape timestamp, consecutive failure count, and last error type
-- [ ] **HEALTH-02**: Retailer URLs are visually categorized as healthy (green), degraded (yellow), or failing (red) based on recent scrape outcomes
-- [ ] **HEALTH-03**: User can sort and filter the health URL list by status, watch query, and last success date
-- [ ] **HEALTH-04**: Dashboard query cards show a health status indicator for each URL at a glance
+- [x] **HEALTH-01**: User can view a health dashboard page listing all retailer URLs with per-URL success rate (last N attempts), last successful scrape timestamp, consecutive failure count, and last error type
+- [x] **HEALTH-02**: Retailer URLs are visually categorized as healthy (green), degraded (yellow), or failing (red) based on recent scrape outcomes
+- [x] **HEALTH-03**: User can sort and filter the health URL list by status, watch query, and last success date
+- [x] **HEALTH-04**: Dashboard query cards show a health status indicator for each URL at a glance
 
 ### Wayback Price Comparisons
 
@@ -153,10 +153,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALERT-05 | Phase 7 | Complete |
 | ALERT-06 | Phase 7 | Complete |
 | ALERT-07 | Phase 7 | Complete |
-| HEALTH-01 | Phase 8 | Pending |
-| HEALTH-02 | Phase 8 | Pending |
-| HEALTH-03 | Phase 8 | Pending |
-| HEALTH-04 | Phase 8 | Pending |
+| HEALTH-01 | Phase 8 | Complete |
+| HEALTH-02 | Phase 8 | Complete |
+| HEALTH-03 | Phase 8 | Complete |
+| HEALTH-04 | Phase 8 | Complete |
 | WAYBACK-01 | Phase 9 | Pending |
 | WAYBACK-02 | Phase 9 | Pending |
 | WAYBACK-03 | Phase 9 | Pending |

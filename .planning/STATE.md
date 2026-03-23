@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: scraping-data-quality
-status: ready-to-plan
-stopped_at: null
-last_updated: "2026-03-22T00:00:00.000Z"
+milestone_name: Scraping & Data Quality
+status: Phase complete — ready for verification
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-03-23T15:22:35.062Z"
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 10
-  completed_plans: 0
+  total_phases: 11
+  completed_phases: 8
+  total_plans: 24
+  completed_plans: 24
 ---
 
 # Project State
@@ -19,20 +19,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** The full loop must work -- a scheduled scrape runs automatically, finds a price at or below the configured threshold, and triggers a visible in-app alert without manual intervention.
-**Current focus:** Milestone v1.1 -- Phase 8: Scrape Health Dashboard
+**Current focus:** Phase 08 — scrape-health-dashboard
 
 ## Current Position
 
-Phase: 8 of 11 (Scrape Health Dashboard)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-03-22 -- Roadmap created for v1.1 (Phases 8-11)
-
-Progress: [==================..] 70% (v1.0 complete, v1.1 starting)
+Phase: 08 (scrape-health-dashboard) — EXECUTING
+Plan: 3 of 3
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 21 (v1.0)
 - Average duration: 3min
 - Total execution time: ~1.1 hours
@@ -45,10 +42,14 @@ Progress: [==================..] 70% (v1.0 complete, v1.1 starting)
 | 07 | 07-01, 07-02, 07-03 | 9min | 3min |
 
 **Recent Trend:**
+
 - Last 5 plans: 2min, 2min, 5min, 2min, 2min
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 08 P01 | 5min | 2 tasks | 11 files |
+| Phase 08 P02 | 3min | 2 tasks | 10 files |
+| Phase 08 P03 | 3 | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,13 @@ Recent decisions affecting current work:
 - [Research]: rapidfuzz>=3.12.0 is the only new dependency for v1.1 (MIT license, C++ core)
 - [Research]: Success rate must be computed over last N attempts, not calendar windows
 - [Research]: Wayback comparisons need proximity window validation and minimum 3-point floor for averages
+- [Phase 08]: Used /scrape-health prefix (not /health) to avoid collision with existing GET /health server check
+- [Phase 08]: Consecutive failures computed in Python after SQL window query (simpler than correlated subquery in SQLite)
+- [Phase 08]: ScrapeUrlAttempt does not use TimestampMixin: only scraped_at is needed (no created_at/updated_at)
+- [Phase 08]: STATUS_ORDER uses failing=2/degraded=1/healthy=0 so desc sort puts failing first
+- [Phase 08]: useHealthUrls/useHealthByQuery use select transform to unwrap urls array from HealthListResponse
+- [Phase 08-03]: Threaded healthData through QueryCardGrid to preserve existing grid abstraction
+- [Phase 08-03]: useMemo for healthByQuery map indexed by watch_query_id for O(1) per-card lookup
 
 ### Pending Todos
 
@@ -77,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22
-Stopped at: Roadmap created for v1.1 milestone (Phases 8-11)
+Last session: 2026-03-23T15:22:35.058Z
+Stopped at: Completed 08-03-PLAN.md
 Resume file: None

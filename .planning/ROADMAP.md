@@ -163,12 +163,12 @@ Plans:
   2. Each URL is visually categorized as healthy (green), degraded (yellow), or failing (red) based on its recent scrape outcomes, with thresholds clearly applied
   3. User can sort the health URL list by status, watch query, and last success date, and filter to show only degraded or failing URLs
   4. Dashboard query cards display a health status indicator for each URL so the user can spot problems without navigating to the health page
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 08-01-PLAN.md — Backend data model, migration, repository, scrape service integration, and health API endpoint
-- [ ] 08-02-PLAN.md — Frontend health page with table, sort/filter, status dots, routing, and nav link
-- [ ] 08-03-PLAN.md — QueryCard per-URL health mini-dots integration
+- [x] 08-01-PLAN.md — Backend data model, migration, repository, scrape service integration, and health API endpoint
+- [x] 08-02-PLAN.md — Frontend health page with table, sort/filter, status dots, routing, and nav link
+- [x] 08-03-PLAN.md — QueryCard per-URL health mini-dots integration
 
 ### Phase 9: Wayback Price Comparisons
 **Goal**: Users see contextual price history alongside current prices -- how much a product cost 30 and 90 days ago, whether the current price is a good deal relative to historical averages, and the all-time high price
@@ -230,7 +230,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 5. Dashboard Frontend | v1.0 | 4/4 | Complete | - |
 | 6. Price History Visualization + Polish | v1.0 | 2/2 | Complete | - |
 | 7. Advanced Alert Enhancements | v1.0 | 3/3 | Complete | 2026-03-22 |
-| 8. Scrape Health Dashboard | v1.1 | 0/3 | Planning | - |
+| 8. Scrape Health Dashboard | v1.1 | 3/3 | Complete   | 2026-03-23 |
 | 9. Wayback Price Comparisons | v1.1 | 0/2 | Not started | - |
 | 10. Multi-Product Fuzzy Matching | v1.1 | 0/3 | Not started | - |
 | 11. Polish & P2 Features | v1.1 | 0/2 | Not started | - |
