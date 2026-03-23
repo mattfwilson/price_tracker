@@ -35,8 +35,8 @@ The full loop must work: a scheduled scrape runs automatically, finds a price at
 
 ### Active
 
-- [ ] User can view a scrape health dashboard showing per-URL success rate, last successful scrape, and consecutive failure count
-- [ ] URLs with repeated failures are visually flagged so the user can investigate or remove them
+- ✓ User can view a scrape health dashboard showing per-URL success rate, last successful scrape, and consecutive failure count — Validated in Phase 08: scrape-health-dashboard
+- ✓ URLs with repeated failures are visually flagged so the user can investigate or remove them — Validated in Phase 08: scrape-health-dashboard
 - [ ] User can see contextual price comparisons (e.g., "30 days ago: $X", "90 days ago: $Y") alongside price history
 - [ ] Dashboard or detail view surfaces whether the current price is above/below historical averages
 - [ ] Scraper detects when multiple retailer URLs resolve to the same product (by fuzzy title match) and groups them as a matched set
@@ -100,4 +100,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-22 after v1.1 milestone start*
+*Last updated: 2026-03-23 — Phase 08 complete (scrape health dashboard)*
