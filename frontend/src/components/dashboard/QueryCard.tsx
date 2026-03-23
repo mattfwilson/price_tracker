@@ -9,13 +9,15 @@ import { useWatchQueryDetail, useScrapeNow } from "@/hooks/use-watch-queries";
 import { Clock } from "lucide-react";
 import { StatusDot, deriveStatus } from "./StatusDot";
 import { CardMenu } from "./CardMenu";
-import type { WatchQueryResponse } from "@/types/api";
+import { UrlHealthDots } from "./UrlHealthDots";
+import type { UrlHealthResponse, WatchQueryResponse } from "@/types/api";
 
 interface QueryCardProps {
   query: WatchQueryResponse;
   onCardClick: (id: number) => void;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
+  healthData?: UrlHealthResponse[];
 }
 
 export function isThresholdBreached(
@@ -29,7 +31,7 @@ export function isThresholdBreached(
   return Math.min(...validPrices) <= thresholdCents;
 }
 
-export function QueryCard({ query, onCardClick, onEdit, onDelete }: QueryCardProps) {
+export function QueryCard({ query, onCardClick, onEdit, onDelete, healthData }: QueryCardProps) {
   const { data: detail, isLoading: detailLoading } = useWatchQueryDetail(query.id);
   const scrapeNowMutation = useScrapeNow();
   const [isScrapingLocal, setIsScrapingLocal] = useState(false);
@@ -169,6 +171,9 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete }: QueryCardPro
             </span>
           )}
         </div>
+
+        {/* Per-URL health dots (per D-12, D-15: additional, not replacing StatusDot) */}
+        <UrlHealthDots healthData={healthData} />
 
         {/* Schedule line */}
         <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">

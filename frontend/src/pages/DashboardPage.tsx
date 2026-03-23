@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useWatchQueries, useWatchQueryDetail } from "@/hooks/use-watch-queries";
+import { useHealthUrls } from "@/hooks/use-health";
 import { QueryCardGrid } from "@/components/dashboard/QueryCardGrid";
 import { QueryFormDialog } from "@/components/query/QueryFormDialog";
 import { DeleteQueryDialog } from "@/components/query/DeleteQueryDialog";
+import type { UrlHealthResponse } from "@/types/api";
 
 export function DashboardPage() {
   const { data: queries, isLoading, isError } = useWatchQueries();
+  const { data: allHealthData } = useHealthUrls();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editQueryId, setEditQueryId] = useState<number | null>(null);
   const [deleteQuery, setDeleteQuery] = useState<{ id: number; name: string } | null>(null);
 
   const { data: editQueryDetail } = useWatchQueryDetail(editQueryId);
+
+  const healthByQuery = useMemo(() => {
+    if (!allHealthData) return {};
+    const map: Record<number, UrlHealthResponse[]> = {};
+    for (const h of allHealthData) {
+      (map[h.watch_query_id] ??= []).push(h);
+    }
+    return map;
+  }, [allHealthData]);
 
   return (
     <div>
@@ -28,6 +40,7 @@ export function DashboardPage() {
           const query = queries?.find((q) => q.id === id);
           setDeleteQuery({ id, name: query?.name ?? "" });
         }}
+        healthByQuery={healthByQuery}
       />
 
       <QueryFormDialog
