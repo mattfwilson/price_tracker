@@ -179,11 +179,11 @@ Plans:
   2. Watch query detail view shows 30-day and 90-day rolling average prices with sample counts displayed; averages are suppressed (not shown) when fewer than 3 data points exist in the window
   3. Each listing shows a good deal / bad deal indicator based on whether the current price is below the 90-day rolling average
   4. The all-time high price is displayed alongside the existing all-time low for each listing
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — TBD
-- [ ] 09-02-PLAN.md — TBD
+- [ ] 09-01-PLAN.md — Backend repo functions (nearest-date price lookup, per-URL all-time extremes), schema extension, detail endpoint wiring
+- [ ] 09-02-PLAN.md — Frontend TypeScript types, formatShortDate, WaybackStats/DealBadge in ListingRow, visual verification
 
 ### Phase 10: Multi-Product Fuzzy Matching
 **Goal**: The system automatically detects when different retailer URLs sell the same product and groups them so the user can compare prices across retailers for a single item
