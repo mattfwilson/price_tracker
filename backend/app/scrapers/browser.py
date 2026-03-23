@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 import subprocess
@@ -132,6 +133,42 @@ _BROWSER_REGISTRY: list[tuple[str, str, str | None, dict[str, list[str]]]] = [
         },
     ),
 ]
+
+
+def _get_frontmost_app() -> str | None:
+    """Return the name of the currently focused app (macOS only)."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "osascript",
+                "-e",
+                "tell application \"System Events\" to get name of first application process whose frontmost is true",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception as exc:
+        logger.debug("Could not get frontmost app: %s", exc)
+    return None
+
+
+def _activate_app(app_name: str) -> None:
+    """Bring the named app back to the foreground (macOS only)."""
+    if sys.platform != "darwin" or not app_name:
+        return
+    try:
+        subprocess.run(
+            ["osascript", "-e", f'tell application "{app_name}" to activate'],
+            capture_output=True,
+            timeout=2,
+        )
+    except Exception as exc:
+        logger.debug("Could not activate app %r: %s", app_name, exc)
 
 
 def _detect_default_browser_bundle() -> str | None:
@@ -293,22 +330,54 @@ class BrowserManager:
         """Launch a persistent browser context with stealth settings."""
         _PROFILE_DIR.mkdir(parents=True, exist_ok=True)
         browser_kwargs = _find_browser_kwargs()
+        prev_app = _get_frontmost_app()
         self._context = await self._playwright.chromium.launch_persistent_context(
             user_data_dir=str(_PROFILE_DIR),
             headless=False,  # patchright requires headless=False for full Cloudflare stealth
             no_viewport=True,
+            # Open the window far off-screen so it's invisible even if it
+            # briefly reaches the top of the z-order before focus is restored.
+            args=["--window-position=-32000,-32000"],
             **browser_kwargs,
         )
+        # Chrome steals focus asynchronously after the context is ready, so
+        # wait briefly to let that settle before restoring the previous app.
+        if prev_app:
+            await asyncio.sleep(0.3)
+            _activate_app(prev_app)
 
     async def new_page(self) -> Page:
         """Create a new page, relaunching context if it has been closed."""
+        prev_app = _get_frontmost_app()
         if self._context is None:
             await self._launch_context()
         try:
-            return await self._context.new_page()
+            page = await self._context.new_page()
         except Exception:
             await self._launch_context()
-            return await self._context.new_page()
+            page = await self._context.new_page()
+        await self._minimize_window(page)
+        # Opening a new tab can unminimize or foreground the browser window;
+        # restore focus to the app that was active before the scrape started.
+        if prev_app:
+            _activate_app(prev_app)
+        return page
+
+    async def _minimize_window(self, page: Page) -> None:
+        """Minimize the scraper browser window so it doesn't steal focus."""
+        try:
+            cdp = await self._context.new_cdp_session(page)
+            window_info = await cdp.send("Browser.getWindowForTarget")
+            await cdp.send(
+                "Browser.setWindowBounds",
+                {
+                    "windowId": window_info["windowId"],
+                    "bounds": {"windowState": "minimized"},
+                },
+            )
+            await cdp.detach()
+        except Exception as exc:
+            logger.debug("Could not minimize scraper window: %s", exc)
 
     async def close_browser(self) -> None:
         """Close the Chrome window without stopping playwright.

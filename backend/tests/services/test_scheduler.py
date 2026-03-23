@@ -26,7 +26,7 @@ async def running_scheduler():
 
 class TestScheduleMap:
     def test_schedule_map_keys(self):
-        assert set(SCHEDULE_MAP.keys()) == {"every_6h", "every_12h", "daily", "weekly"}
+        assert set(SCHEDULE_MAP.keys()) == {"every_1h", "every_3h", "every_6h", "every_12h", "daily", "weekly"}
 
     def test_schedule_map_values(self):
         assert SCHEDULE_MAP["every_6h"] == {"hours": 6}

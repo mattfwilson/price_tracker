@@ -10,6 +10,11 @@ from patchright.async_api import Page
 from app.scrapers.base import BaseExtractor, FailureType, ScrapeData, ScrapeError
 from app.scrapers.registry import register_extractor
 
+_NEXT_DATA_RE = re.compile(
+    r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+    re.DOTALL | re.IGNORECASE,
+)
+
 # Bot-wall signals checked against the page TITLE only (not the full HTML body,
 # which contains JS bundles that trigger false positives on normal product pages).
 # Walmart challenge pages have distinctive titles; product pages never do.
@@ -56,6 +61,82 @@ class WalmartExtractor(BaseExtractor):
     @property
     def domain_patterns(self) -> list[str]:
         return ["walmart.com", "www.walmart.com"]
+
+    @property
+    def supports_http_scrape(self) -> bool:
+        return True
+
+    async def http_scrape(self, url: str) -> ScrapeData:
+        """Fetch and parse __NEXT_DATA__ without a browser. Falls back to browser if PerimeterX blocks."""
+        import httpx
+        try:
+            async with httpx.AsyncClient(
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "DNT": "1",
+                    "Connection": "keep-alive",
+                    "Upgrade-Insecure-Requests": "1",
+                },
+                follow_redirects=True,
+                timeout=20,
+            ) as client:
+                resp = await client.get(url)
+        except Exception as exc:
+            raise ScrapeError(FailureType.NETWORK_ERROR, str(exc))
+
+        if resp.status_code in (403, 429, 503):
+            raise ScrapeError(FailureType.BLOCKED, f"HTTP {resp.status_code}")
+        if resp.status_code != 200:
+            raise ScrapeError(FailureType.NETWORK_ERROR, f"HTTP {resp.status_code}")
+
+        # Check the *final* URL after redirects — PerimeterX redirects to px.walmart.com
+        final_url = str(resp.url)
+        html = resp.text
+
+        raw_title = ""
+        title_m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
+        if title_m:
+            raw_title = title_m.group(1)
+        if any(sig in raw_title.lower() for sig in _BLOCK_TITLE_SIGNALS) or "px.walmart.com" in final_url:
+            raise ScrapeError(FailureType.BLOCKED, f"Bot detection (title: {raw_title!r})")
+
+        # __NEXT_DATA__ strategy
+        nd_m = _NEXT_DATA_RE.search(html)
+        if nd_m:
+            try:
+                data = json.loads(nd_m.group(1))
+                product = (
+                    data.get("props", {})
+                    .get("pageProps", {})
+                    .get("initialData", {})
+                    .get("data", {})
+                    .get("product", {})
+                )
+                name = product.get("name")
+                price = _find_price_in_product(product)
+                if name and price is not None:
+                    return ScrapeData(
+                        product_name=name,
+                        price_cents=int(round(price * 100)),
+                        listing_url=url,
+                        retailer_name=self.retailer_name,
+                    )
+            except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+                pass
+
+        # JSON-LD fallback
+        result = self._parse_json_ld_from_html(html, url)
+        if result:
+            return result
+
+        raise ScrapeError(FailureType.EXTRACTION_ERROR, "Could not extract product data via HTTP")
 
     async def extract(self, page: Page, url: str) -> ScrapeData:
         # Wait for full page load so __NEXT_DATA__ is populated

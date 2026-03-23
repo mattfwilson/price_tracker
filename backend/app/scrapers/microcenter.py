@@ -1,18 +1,20 @@
 """Micro Center product page extractor.
 
 Extraction strategy (in priority order):
-1. JSON-LD / schema.org structured data — most stable
-2. Microdata itemprop attributes — standard across site redesigns
-3. CSS selectors — legacy fallback
+1. HTTP-only (no browser) — JSON-LD from raw HTML; fast and invisible
+2. JSON-LD / schema.org structured data via browser — most stable
+3. Microdata itemprop attributes — standard across site redesigns
+4. CSS selectors — legacy fallback
 
 Bot detection: Micro Center uses light/standard CDN-level protection (not enterprise
-bot management). The persistent patchright browser profile is more than sufficient.
+bot management), so plain HTTP requests succeed reliably.
 """
 
 from __future__ import annotations
 
 import logging
 import random
+import re
 
 from patchright.async_api import Page
 
@@ -22,6 +24,17 @@ from app.scrapers.registry import register_extractor
 logger = logging.getLogger(__name__)
 
 _BLOCK_TITLES = ("access denied", "403 forbidden", "blocked", "captcha")
+
+# Matches itemprop="price" with either a content="…" attribute or inner text
+_ITEMPROP_PRICE_RE = re.compile(
+    r'itemprop=["\']price["\'][^>]*content=["\']([^"\']+)["\']'
+    r'|itemprop=["\']price["\'][^>]*>\s*([^<]+?)\s*<',
+    re.IGNORECASE,
+)
+_ITEMPROP_NAME_RE = re.compile(
+    r'itemprop=["\']name["\'][^>]*>\s*([^<]+?)\s*<',
+    re.IGNORECASE,
+)
 
 
 class MicrocenterExtractor(BaseExtractor):
@@ -34,6 +47,40 @@ class MicrocenterExtractor(BaseExtractor):
     @property
     def domain_patterns(self) -> list[str]:
         return ["microcenter.com", "www.microcenter.com"]
+
+    @property
+    def supports_http_scrape(self) -> bool:
+        return True
+
+    async def http_scrape(self, url: str) -> ScrapeData:
+        """Fetch and parse without a browser — works reliably against Micro Center's light bot protection."""
+        html = await self._http_get(url)
+
+        # Block detection via title
+        title_m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
+        title = title_m.group(1).lower() if title_m else ""
+        if any(s in title for s in _BLOCK_TITLES):
+            raise ScrapeError(FailureType.BLOCKED, f"Bot detection (title: {title!r})")
+
+        # Strategy 1: JSON-LD
+        result = self._parse_json_ld_from_html(html, url)
+        if result:
+            return result
+
+        # Strategy 2: itemprop microdata
+        price_m = _ITEMPROP_PRICE_RE.search(html)
+        name_m = _ITEMPROP_NAME_RE.search(html)
+        if price_m and name_m:
+            price_str = (price_m.group(1) or price_m.group(2)).strip()
+            name = name_m.group(1).strip()
+            return ScrapeData(
+                product_name=name,
+                price_cents=self._parse_price_to_cents(price_str),
+                listing_url=url,
+                retailer_name=self.retailer_name,
+            )
+
+        raise ScrapeError(FailureType.EXTRACTION_ERROR, "Could not extract product data via HTTP")
 
     async def extract(self, page: Page, url: str) -> ScrapeData:
         # Wait for price element — covers SSR pages and any light JS rendering

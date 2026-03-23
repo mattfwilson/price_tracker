@@ -13,7 +13,7 @@ describe("StatusDot", () => {
 
   it("renders red dot for error status", () => {
     const { container } = render(<StatusDot status="error" />);
-    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.getByText("Scrape failed")).toBeInTheDocument();
     const dot = container.querySelector(".bg-red-500");
     expect(dot).toBeInTheDocument();
   });
@@ -28,7 +28,7 @@ describe("StatusDot", () => {
   it("renders zinc dot for paused status", () => {
     const { container } = render(<StatusDot status="paused" />);
     expect(screen.getByText("Paused")).toBeInTheDocument();
-    const dot = container.querySelector(".bg-zinc-400");
+    const dot = container.querySelector(".bg-zinc-500");
     expect(dot).toBeInTheDocument();
   });
 });

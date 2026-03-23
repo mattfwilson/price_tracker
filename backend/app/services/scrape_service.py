@@ -34,16 +34,26 @@ def _is_retryable(exc: BaseException) -> bool:
 
 
 @retry(
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=1, max=4),
+    retry=retry_if_exception(_is_retryable),
+    reraise=True,
+)
+async def _http_scrape_with_retry(extractor, url: str) -> ScrapeData:
+    """HTTP-only scrape with a small retry budget for transient network errors."""
+    return await extractor.http_scrape(url)
+
+
+@retry(
     stop=stop_after_attempt(4),
     wait=wait_exponential(multiplier=2, min=2, max=8),
     retry=retry_if_exception(_is_retryable),
     reraise=True,
 )
-async def scrape_single_url(
-    browser_manager: BrowserManager, url: str
+async def _browser_scrape_with_retry(
+    browser_manager: BrowserManager, extractor, url: str
 ) -> ScrapeData:
-    """Scrape a single URL with retry logic for transient failures."""
-    extractor = get_extractor(url)
+    """Browser-based scrape with full retry budget."""
     page = await browser_manager.new_page()
     try:
         await asyncio.sleep(random.uniform(0.5, 2.0))  # human simulation delay
@@ -58,6 +68,32 @@ async def scrape_single_url(
         raise ScrapeError(FailureType.NETWORK_ERROR, str(e))
     finally:
         await page.close()
+
+
+async def scrape_single_url(
+    browser_manager: BrowserManager, url: str
+) -> ScrapeData:
+    """Scrape a single URL, trying HTTP-only first when supported.
+
+    HTTP and browser paths each have their own independent retry budgets so a
+    blocked HTTP attempt never burns browser retry attempts, and a browser
+    failure never re-attempts the HTTP path.
+    """
+    extractor = get_extractor(url)
+
+    if extractor.supports_http_scrape:
+        try:
+            return await _http_scrape_with_retry(extractor, url)
+        except ScrapeError as e:
+            if e.failure_type == FailureType.BLOCKED:
+                logger.debug(
+                    "HTTP scrape blocked for %s (%s), falling back to browser",
+                    url, e.message,
+                )
+            else:
+                raise
+
+    return await _browser_scrape_with_retry(browser_manager, extractor, url)
 
 
 async def run_scrape_job(

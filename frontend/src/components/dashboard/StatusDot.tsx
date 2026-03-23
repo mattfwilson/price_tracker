@@ -1,14 +1,15 @@
 import { cn } from "@/lib/utils";
 import type { WatchQueryDetailResponse } from "@/types/api";
 
-export type StatusType = "ok" | "error" | "running" | "paused";
+export type StatusType = "ok" | "error" | "warning" | "running" | "paused";
 
 const statusConfig: Record<
   StatusType,
   { color: string; label: string; pulse?: boolean }
 > = {
   ok: { color: "bg-emerald-500", label: "OK" },
-  error: { color: "bg-red-500", label: "Error" },
+  error: { color: "bg-red-500", label: "Scrape failed" },
+  warning: { color: "bg-amber-500", label: "Partial failure" },
   running: { color: "bg-amber-500", label: "Running", pulse: true },
   paused: { color: "bg-zinc-500", label: "Paused" },
 };
@@ -39,5 +40,7 @@ export function deriveStatus(
 ): StatusType {
   if (isScrapingLocal) return "running";
   if (detail && !detail.is_active) return "paused";
+  if (detail?.last_job_status === "failed") return "error";
+  if (detail?.last_job_status === "partial_success") return "warning";
   return "ok";
 }

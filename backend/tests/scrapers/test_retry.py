@@ -19,6 +19,13 @@ def _make_mock_browser() -> MagicMock:
     return browser
 
 
+def _configure_mock_extractor(mock_get, extract_mock: AsyncMock) -> None:
+    """Configure all async extractor methods on mock_get.return_value."""
+    mock_get.return_value.supports_http_scrape = False
+    mock_get.return_value.pre_navigate = AsyncMock()
+    mock_get.return_value.extract = extract_mock
+
+
 def _make_scrape_data() -> ScrapeData:
     return ScrapeData(
         product_name="Test",
@@ -37,7 +44,7 @@ async def test_retries_on_network_error():
     )
 
     with patch("app.services.scrape_service.get_extractor") as mock_get:
-        mock_get.return_value.extract = mock_extractor
+        _configure_mock_extractor(mock_get, mock_extractor)
         with patch("app.services.scrape_service.asyncio.sleep", new_callable=AsyncMock):
             with pytest.raises((ScrapeError, RetryError)):
                 await scrape_single_url(browser, "https://amazon.com/dp/test")
@@ -54,7 +61,7 @@ async def test_retries_on_extraction_error():
     )
 
     with patch("app.services.scrape_service.get_extractor") as mock_get:
-        mock_get.return_value.extract = mock_extractor
+        _configure_mock_extractor(mock_get, mock_extractor)
         with patch("app.services.scrape_service.asyncio.sleep", new_callable=AsyncMock):
             with pytest.raises((ScrapeError, RetryError)):
                 await scrape_single_url(browser, "https://amazon.com/dp/test")
@@ -71,7 +78,7 @@ async def test_no_retry_on_blocked():
     )
 
     with patch("app.services.scrape_service.get_extractor") as mock_get:
-        mock_get.return_value.extract = mock_extractor
+        _configure_mock_extractor(mock_get, mock_extractor)
         with patch("app.services.scrape_service.asyncio.sleep", new_callable=AsyncMock):
             with pytest.raises(ScrapeError) as exc_info:
                 await scrape_single_url(browser, "https://amazon.com/dp/test")
@@ -88,7 +95,7 @@ async def test_success_no_retry():
     mock_extractor = AsyncMock(return_value=expected)
 
     with patch("app.services.scrape_service.get_extractor") as mock_get:
-        mock_get.return_value.extract = mock_extractor
+        _configure_mock_extractor(mock_get, mock_extractor)
         with patch("app.services.scrape_service.asyncio.sleep", new_callable=AsyncMock):
             result = await scrape_single_url(browser, "https://amazon.com/dp/test")
 
@@ -110,7 +117,7 @@ async def test_success_after_retry():
     )
 
     with patch("app.services.scrape_service.get_extractor") as mock_get:
-        mock_get.return_value.extract = mock_extractor
+        _configure_mock_extractor(mock_get, mock_extractor)
         with patch("app.services.scrape_service.asyncio.sleep", new_callable=AsyncMock):
             result = await scrape_single_url(browser, "https://amazon.com/dp/test")
 
@@ -131,7 +138,7 @@ async def test_backoff_timing():
         sleep_calls.append(seconds)
 
     with patch("app.services.scrape_service.get_extractor") as mock_get:
-        mock_get.return_value.extract = mock_extractor
+        _configure_mock_extractor(mock_get, mock_extractor)
         with patch("app.services.scrape_service.asyncio.sleep", side_effect=mock_sleep):
             with patch("tenacity.nap.sleep", side_effect=mock_sleep):
                 with pytest.raises((ScrapeError, RetryError)):

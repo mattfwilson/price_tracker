@@ -35,6 +35,10 @@ def _make_mock_page(
     page = AsyncMock()
     type(page).url = PropertyMock(return_value=url)
     page.content = AsyncMock(return_value=content)
+    # title() must return a plain string so `.lower()` works correctly
+    page.title = AsyncMock(return_value="")
+    # context.cookies() must return an iterable; include _abck so BestBuy passes its session check
+    page.context.cookies = AsyncMock(return_value=[{"name": "_abck", "value": "test"}])
 
     # Build script element mocks for JSON-LD
     script_elements = []
@@ -232,6 +236,7 @@ async def test_walmart_extract_next_data():
     page = AsyncMock()
     type(page).url = PropertyMock(return_value="https://www.walmart.com/ip/ipad")
     page.content = AsyncMock(return_value="<html></html>")
+    page.title = AsyncMock(return_value="")
     page.query_selector_all = AsyncMock(return_value=[])
 
     # Mock __NEXT_DATA__ script element

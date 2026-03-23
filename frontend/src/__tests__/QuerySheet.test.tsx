@@ -61,13 +61,12 @@ describe("ListingRow", () => {
     expect(screen.queryByText("Lowest")).not.toBeInTheDocument();
   });
 
-  it("renders 'Available in next update' title attribute on history link", () => {
+  it("renders a history link", () => {
     const url = makeUrl(1, 30000);
     render(
       <ListingRow url={url} isLowest={false} thresholdCents={50000} />
     );
-    const historyLink = screen.getByText("View history");
-    expect(historyLink).toHaveAttribute("title", "Available in next update");
+    expect(screen.getByText("View history")).toBeInTheDocument();
   });
 
   it("renders correct delta color for 'lower' direction", () => {
@@ -75,8 +74,7 @@ describe("ListingRow", () => {
     render(
       <ListingRow url={url} isLowest={false} thresholdCents={50000} />
     );
-    // The delta display should contain text-emerald-600 class
     const deltaEl = screen.getByText(/5\.0%/);
-    expect(deltaEl.closest("span")).toHaveClass("text-emerald-600");
+    expect(deltaEl.closest("span")).toHaveClass("text-emerald-400");
   });
 });

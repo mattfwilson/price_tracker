@@ -83,8 +83,10 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete, healthData }: 
   return (
     <Card
       className={cn(
-        "cursor-pointer hover:shadow-md transition-shadow duration-150 min-h-[200px]",
-        breached && "border-l-[3px] border-l-emerald-500"
+        "cursor-pointer transition-all duration-150 min-h-[200px]",
+        breached
+          ? "shadow-[0_0_16px_4px_rgba(34,197,94,0.4)] border-emerald-500/60 hover:border-emerald-400"
+          : "hover:shadow-md hover:border-zinc-400 dark:hover:border-zinc-600"
       )}
       onClick={() => onCardClick(query.id)}
     >
@@ -94,7 +96,7 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete, healthData }: 
           {query.name}
         </h3>
         <div className="flex items-center gap-2 shrink-0">
-          <Badge variant="secondary" className="text-xs">
+          <Badge className="text-xs bg-zinc-200 text-zinc-700 border-zinc-300 dark:bg-zinc-700 dark:text-zinc-200 dark:border-zinc-600">
             {query.retailer_urls.length} url{query.retailer_urls.length !== 1 ? "s" : ""}
           </Badge>
           {/* Wrapper intercepts all pointer/click events so none reach the card */}
@@ -138,15 +140,19 @@ export function QueryCard({ query, onCardClick, onEdit, onDelete, healthData }: 
                     : `${lowestResult.pct_change.toFixed(1)}%`}
               </span>
             </div>
-            {breached && (
-              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
-                Below threshold
-              </Badge>
-            )}
-            {detail?.is_all_time_low && (
-              <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30">
-                All-Time Low
-              </Badge>
+            {(breached || detail?.is_all_time_low) && (
+              <div className="flex items-center gap-2">
+                {breached && (
+                  <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                    Below threshold
+                  </Badge>
+                )}
+                {detail?.is_all_time_low && (
+                  <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30">
+                    All-Time Low
+                  </Badge>
+                )}
+              </div>
             )}
           </div>
         ) : (
