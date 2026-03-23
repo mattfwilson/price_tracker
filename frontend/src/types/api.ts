@@ -130,3 +130,23 @@ export interface HistoryRecord {
   delta_cents: number;
   pct_change: number;
 }
+
+export type HealthStatus = "healthy" | "degraded" | "failing";
+
+export interface UrlHealthResponse {
+  retailer_url_id: number;
+  url: string;
+  domain: string;
+  watch_query_id: number;
+  watch_query_name: string;
+  status: HealthStatus;
+  success_count: number;
+  window_size: number;
+  last_success_at: string | null;
+  consecutive_failures: number;
+  last_error_type: string | null;
+}
+
+export interface HealthListResponse {
+  urls: UrlHealthResponse[];
+}

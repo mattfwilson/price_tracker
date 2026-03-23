@@ -7,6 +7,7 @@ import type {
   UnreadCountResponse,
   ScrapeJobResponse,
   HistoryRecord,
+  HealthListResponse,
 } from "@/types/api";
 
 const API_BASE = "http://localhost:8000";
@@ -85,5 +86,10 @@ export const api = {
       apiFetch<{ dismissed_count: number }>("/alerts/dismiss-all", {
         method: "POST",
       }),
+  },
+  scrapeHealth: {
+    urls: () => apiFetch<HealthListResponse>("/scrape-health/urls"),
+    byQuery: (watchQueryId: number) =>
+      apiFetch<HealthListResponse>(`/scrape-health/query/${watchQueryId}`),
   },
 };
