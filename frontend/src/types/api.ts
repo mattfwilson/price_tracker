@@ -19,14 +19,23 @@ export interface RetailerUrlWithLatest {
   url: string;
   created_at: string;
   latest_result: LatestScrapeResult | null;
+  // Wayback price comparison stats
+  price_30d_cents: number | null;
+  date_30d: string | null;
+  price_90d_cents: number | null;
+  date_90d: string | null;
+  avg_30d_cents: number | null;
+  avg_30d_count: number | null;
+  avg_90d_cents: number | null;
+  avg_90d_count: number | null;
+  all_time_low_cents: number | null;
+  all_time_high_cents: number | null;
 }
 
 export interface WatchQueryResponse {
   id: number;
   name: string;
   threshold_cents: number;
-  pct_drop_threshold: number | null;
-  alert_cooldown_hours: number;
   is_active: boolean;
   schedule: string;
   retailer_urls: RetailerUrlResponse[];
@@ -38,15 +47,9 @@ export interface WatchQueryDetailResponse {
   id: number;
   name: string;
   threshold_cents: number;
-  pct_drop_threshold: number | null;
-  alert_cooldown_hours: number;
   is_active: boolean;
   schedule: string;
   retailer_urls: RetailerUrlWithLatest[];
-  last_job_status: "success" | "failed" | "partial_success" | null;
-  last_job_error: string | null;
-  next_run_at: string | null;
-  is_all_time_low: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -56,8 +59,6 @@ export interface WatchQueryCreate {
   threshold_cents: number;
   urls: string[];
   schedule: string;
-  pct_drop_threshold?: number | null;
-  alert_cooldown_hours?: number;
 }
 
 export interface WatchQueryUpdate {
@@ -66,8 +67,6 @@ export interface WatchQueryUpdate {
   is_active?: boolean;
   schedule?: string;
   urls?: string[];
-  pct_drop_threshold?: number | null;
-  alert_cooldown_hours?: number;
 }
 
 export interface AlertResponse {
@@ -78,7 +77,6 @@ export interface AlertResponse {
   price_cents: number;
   retailer_name: string;
   listing_url: string;
-  alert_type: string;
   is_read: boolean;
   created_at: string;
 }
@@ -129,24 +127,4 @@ export interface HistoryRecord {
   direction: "new" | "higher" | "lower" | "unchanged";
   delta_cents: number;
   pct_change: number;
-}
-
-export type HealthStatus = "healthy" | "degraded" | "failing";
-
-export interface UrlHealthResponse {
-  retailer_url_id: number;
-  url: string;
-  domain: string;
-  watch_query_id: number;
-  watch_query_name: string;
-  status: HealthStatus;
-  success_count: number;
-  window_size: number;
-  last_success_at: string | null;
-  consecutive_failures: number;
-  last_error_type: string | null;
-}
-
-export interface HealthListResponse {
-  urls: UrlHealthResponse[];
 }
