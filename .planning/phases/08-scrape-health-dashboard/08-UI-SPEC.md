@@ -32,14 +32,14 @@ Declared values (must be multiples of 4):
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4px | Icon gaps, inline padding, gap between mini-dot and domain label |
-| sm | 8px | Compact element spacing, table cell vertical padding |
+| sm | 8px | Compact element spacing, table cell vertical padding, mini-dot-to-label gap |
 | md | 16px | Default element spacing, table cell horizontal padding |
 | lg | 24px | Section padding, page content padding |
 | xl | 32px | Layout gaps between page header and table |
 | 2xl | 48px | Major section breaks |
 | 3xl | 64px | Page-level spacing (not used in this phase) |
 
-Exceptions: Mini-dots use `h-2 w-2` (8px) to match existing StatusDot scale. Gap between mini-dot and domain label is `gap-1.5` (6px) to match existing StatusDot inner gap.
+Exceptions: Mini-dots use `h-2 w-2` (8px) to match existing StatusDot scale. No off-grid exceptions.
 
 ---
 
@@ -50,13 +50,13 @@ Exceptions: Mini-dots use `h-2 w-2` (8px) to match existing StatusDot scale. Gap
 | Body | 14px | 400 (regular) | 1.5 | DM Sans |
 | Label | 12px | 400 (regular) | 1.5 | DM Sans |
 | Heading | 24px | 700 (bold) | 1.2 | Outfit |
-| Table Header | 14px | 500 (medium) | 1.5 | DM Sans |
+| Table Header | 14px | 400 (regular) | 1.5 | DM Sans |
 
 Usage in this phase:
 - **Heading (24px Outfit bold):** Page title "Scrape Health" -- matches existing `text-2xl font-heading font-bold` pattern from DashboardPage and AlertsPage
 - **Body (14px DM Sans regular):** Table cell content (domain, query name, success rate, error type, timestamps)
 - **Label (12px DM Sans regular):** Mini-dot domain labels on QueryCard, filter labels above health table, tooltip text
-- **Table Header (14px DM Sans medium):** Column headers in health table -- matches existing shadcn Table component defaults
+- **Table Header (14px DM Sans regular):** Column headers in health table -- visually distinguished by `text-muted-foreground` color and uppercase/position, not by weight
 
 ---
 
@@ -173,7 +173,7 @@ Position: After the StatusDot line (line 170-177 in current QueryCard), before t
   (existing) Clock icon · Every 6 hours · next in 4h
 ```
 
-- Each mini-dot row: `h-2 w-2` dot + `gap-1.5` + domain label in `text-xs text-muted-foreground`
+- Each mini-dot row: `h-2 w-2` dot + `gap-2` + domain label in `text-xs text-muted-foreground`
 - Container: `mt-2 flex flex-col gap-1` wrapping all mini-dot rows
 - Tooltip on each row: `"{domain} · {success_count}/{window} · last success {relative_time}"`
 - Tooltip implementation: shadcn `Tooltip` component (already available in ui/) or native `title` attribute. Use `title` attribute for simplicity -- no additional shadcn component install needed.
