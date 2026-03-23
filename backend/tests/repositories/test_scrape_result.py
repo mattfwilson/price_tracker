@@ -2,10 +2,8 @@
 
 from datetime import datetime, timedelta
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.scrape_job import ScrapeJob
 from app.models.scrape_result import ScrapeResult
 from app.models.watch_query import WatchQuery
 from app.models.retailer_url import RetailerUrl
@@ -15,10 +13,10 @@ from app.repositories.scrape_result import (
     get_latest_scrape_result,
     get_rolling_avg_price,
     get_all_time_min_price,
+    get_price_near_date,
+    get_all_time_extremes_for_url,
     update_scrape_job,
 )
-from app.repositories.alert import is_within_cooldown
-from app.models.alert import Alert
 
 
 async def _create_prerequisites(db: AsyncSession) -> tuple[int, int]:
@@ -103,6 +101,29 @@ async def test_scrape_result_immutable(db_session: AsyncSession):
     assert hasattr(ScrapeResult, "created_at")
 
 
+async def _make_scrape_result(
+    db: AsyncSession,
+    retailer_url_id: int,
+    scrape_job_id: int,
+    price_cents: int,
+    created_at: datetime | None = None,
+) -> ScrapeResult:
+    """Helper: create a ScrapeResult with optional created_at override."""
+    result = ScrapeResult(
+        retailer_url_id=retailer_url_id,
+        scrape_job_id=scrape_job_id,
+        product_name="Test Product",
+        price_cents=price_cents,
+        listing_url="https://amazon.com/dp/test",
+        retailer_name="Amazon",
+    )
+    if created_at is not None:
+        result.created_at = created_at
+    db.add(result)
+    await db.flush()
+    return result
+
+
 async def test_get_latest_scrape_result(db_session: AsyncSession):
     """Returns most recent ScrapeResult for a given retailer_url_id."""
     wq_id, ru_id = await _create_prerequisites(db_session)
@@ -136,152 +157,146 @@ async def test_get_latest_scrape_result(db_session: AsyncSession):
     assert latest.price_cents == 2000
 
 
-async def _make_scrape_result(db, retailer_url_id, scrape_job_id, price_cents, created_at=None):
-    """Helper: create a ScrapeResult with optional created_at override."""
-    sr = ScrapeResult(
-        retailer_url_id=retailer_url_id,
-        scrape_job_id=scrape_job_id,
-        product_name="Test Product",
-        price_cents=price_cents,
-        listing_url="https://example.com/product",
-        retailer_name="Example",
-    )
-    if created_at is not None:
-        sr.created_at = created_at
-    db.add(sr)
-    await db.flush()
-    return sr
-
-
 class TestRollingAvg:
-    @pytest.mark.asyncio
-    async def test_correct_avg_and_count(self, db_session):
-        """Returns correct average and count for results within 30-day window."""
+    """Tests for get_rolling_avg_price."""
+
+    async def test_returns_avg_within_window(self, db_session: AsyncSession):
+        """Results within window are included in average."""
         wq_id, ru_id = await _create_prerequisites(db_session)
         job = await create_scrape_job(db_session, wq_id)
         now = datetime.utcnow()
 
-        # Create 3 results within 30-day window: 1000, 1200, 800 -> avg=1000, count=3
-        for price, offset_days in [(1000, 5), (1200, 10), (800, 15)]:
-            await _make_scrape_result(db_session, ru_id, job.id, price, now - timedelta(days=offset_days))
-
-        avg, count = await get_rolling_avg_price(db_session, ru_id)
-        assert count == 3
-        assert avg == 1000
-
-    @pytest.mark.asyncio
-    async def test_excludes_old_results(self, db_session):
-        """Results older than 30 days are excluded from the average."""
-        wq_id, ru_id = await _create_prerequisites(db_session)
-        job = await create_scrape_job(db_session, wq_id)
-        now = datetime.utcnow()
-
-        # One result within window, one outside
         await _make_scrape_result(db_session, ru_id, job.id, 1000, now - timedelta(days=5))
-        await _make_scrape_result(db_session, ru_id, job.id, 2000, now - timedelta(days=35))
+        await _make_scrape_result(db_session, ru_id, job.id, 2000, now - timedelta(days=10))
+        # Outside 30-day window
+        await _make_scrape_result(db_session, ru_id, job.id, 9999, now - timedelta(days=40))
 
-        avg, count = await get_rolling_avg_price(db_session, ru_id)
-        assert count == 1
-        assert avg == 1000
+        avg, count = await get_rolling_avg_price(db_session, ru_id, window_days=30)
 
-    @pytest.mark.asyncio
-    async def test_no_results(self, db_session):
-        """Returns (None, 0) when no results exist."""
+        assert count == 2
+        assert avg == 1500  # (1000 + 2000) / 2
+
+    async def test_no_results(self, db_session: AsyncSession):
+        """No results returns (None, 0)."""
         wq_id, ru_id = await _create_prerequisites(db_session)
 
-        avg, count = await get_rolling_avg_price(db_session, ru_id)
+        avg, count = await get_rolling_avg_price(db_session, ru_id, window_days=30)
+
         assert avg is None
         assert count == 0
 
+    async def test_90_day_window(self, db_session: AsyncSession):
+        """Results at -10d, -50d, -80d with window_days=90 returns all three; window_days=30 returns only 1."""
+        wq_id, ru_id = await _create_prerequisites(db_session)
+        job = await create_scrape_job(db_session, wq_id)
+        now = datetime.utcnow()
 
-class TestAllTimeLow:
-    @pytest.mark.asyncio
-    async def test_returns_min_across_urls(self, db_session):
-        """Returns minimum price across all retailer URLs for a watch query."""
-        wq = WatchQuery(name="Test", threshold_cents=5000)
-        db_session.add(wq)
-        await db_session.flush()
+        await _make_scrape_result(db_session, ru_id, job.id, 1000, now - timedelta(days=10))
+        await _make_scrape_result(db_session, ru_id, job.id, 2000, now - timedelta(days=50))
+        await _make_scrape_result(db_session, ru_id, job.id, 3000, now - timedelta(days=80))
 
-        ru1 = RetailerUrl(watch_query_id=wq.id, url="https://store1.com/product")
-        ru2 = RetailerUrl(watch_query_id=wq.id, url="https://store2.com/product")
-        db_session.add_all([ru1, ru2])
-        await db_session.flush()
+        avg_90, count_90 = await get_rolling_avg_price(db_session, ru_id, window_days=90)
+        avg_30, count_30 = await get_rolling_avg_price(db_session, ru_id, window_days=30)
 
-        job = ScrapeJob(watch_query_id=wq.id, status="success", started_at=datetime.utcnow())
-        db_session.add(job)
-        await db_session.flush()
-
-        await _make_scrape_result(db_session, ru1.id, job.id, 1500)
-        await _make_scrape_result(db_session, ru2.id, job.id, 1200)
-
-        min_price = await get_all_time_min_price(db_session, wq.id)
-        assert min_price == 1200
-
-    @pytest.mark.asyncio
-    async def test_no_results(self, db_session):
-        """Returns None when no results exist."""
-        wq = WatchQuery(name="Test", threshold_cents=5000)
-        db_session.add(wq)
-        await db_session.flush()
-
-        min_price = await get_all_time_min_price(db_session, wq.id)
-        assert min_price is None
+        assert count_90 == 3
+        assert avg_90 == 2000  # (1000 + 2000 + 3000) / 3
+        assert count_30 == 1
+        assert avg_30 == 1000
 
 
-class TestIsWithinCooldown:
-    @pytest.mark.asyncio
-    async def test_within_cooldown(self, db_session):
-        """Returns True when last alert is within cooldown window."""
-        wq = WatchQuery(name="Test", threshold_cents=5000)
-        db_session.add(wq)
-        await db_session.flush()
+class TestPriceNearDate:
+    """Tests for get_price_near_date."""
 
-        ru = RetailerUrl(watch_query_id=wq.id, url="https://store.com/p")
-        db_session.add(ru)
-        await db_session.flush()
+    async def test_returns_nearest_result(self, db_session: AsyncSession):
+        """Returns the result nearest to target_date within the proximity window."""
+        wq_id, ru_id = await _create_prerequisites(db_session)
+        job = await create_scrape_job(db_session, wq_id)
+        now = datetime.utcnow()
+        target = now - timedelta(days=30)
 
-        job = ScrapeJob(watch_query_id=wq.id, status="success", started_at=datetime.utcnow())
-        db_session.add(job)
-        await db_session.flush()
+        # Create results at -28d (closer to target) and -32d (farther)
+        closer = await _make_scrape_result(db_session, ru_id, job.id, 1500, now - timedelta(days=28))
+        await _make_scrape_result(db_session, ru_id, job.id, 2000, now - timedelta(days=32))
 
-        sr = await _make_scrape_result(db_session, ru.id, job.id, 1000)
-        alert = Alert(scrape_result_id=sr.id, watch_query_id=wq.id)
-        db_session.add(alert)
-        await db_session.flush()
+        price, actual_date = await get_price_near_date(db_session, ru_id, target, max_delta_days=7)
 
-        result = await is_within_cooldown(db_session, wq.id, 24)
-        assert result is True
+        assert price == closer.price_cents
+        assert actual_date is not None
 
-    @pytest.mark.asyncio
-    async def test_cooldown_expired(self, db_session):
-        """Returns False when last alert is older than cooldown window."""
-        wq = WatchQuery(name="Test", threshold_cents=5000)
-        db_session.add(wq)
-        await db_session.flush()
+    async def test_returns_none_outside_window(self, db_session: AsyncSession):
+        """Returns (None, None) when result is outside the proximity window."""
+        wq_id, ru_id = await _create_prerequisites(db_session)
+        job = await create_scrape_job(db_session, wq_id)
+        now = datetime.utcnow()
+        target = now - timedelta(days=30)
 
-        ru = RetailerUrl(watch_query_id=wq.id, url="https://store.com/p")
-        db_session.add(ru)
-        await db_session.flush()
+        # Result at -45d is outside window of -37d to -23d
+        await _make_scrape_result(db_session, ru_id, job.id, 1500, now - timedelta(days=45))
 
-        job = ScrapeJob(watch_query_id=wq.id, status="success", started_at=datetime.utcnow())
-        db_session.add(job)
-        await db_session.flush()
+        price, actual_date = await get_price_near_date(db_session, ru_id, target, max_delta_days=7)
 
-        sr = await _make_scrape_result(db_session, ru.id, job.id, 1000)
-        alert = Alert(scrape_result_id=sr.id, watch_query_id=wq.id)
-        alert.created_at = datetime.utcnow() - timedelta(hours=25)
-        db_session.add(alert)
-        await db_session.flush()
+        assert price is None
+        assert actual_date is None
 
-        result = await is_within_cooldown(db_session, wq.id, 24)
-        assert result is False
+    async def test_exact_match(self, db_session: AsyncSession):
+        """Returns the exact result when it matches target_date exactly."""
+        wq_id, ru_id = await _create_prerequisites(db_session)
+        job = await create_scrape_job(db_session, wq_id)
+        now = datetime.utcnow()
+        target = now - timedelta(days=30)
 
-    @pytest.mark.asyncio
-    async def test_no_alerts(self, db_session):
-        """Returns False when no alerts exist."""
-        wq = WatchQuery(name="Test", threshold_cents=5000)
-        db_session.add(wq)
-        await db_session.flush()
+        exact = await _make_scrape_result(db_session, ru_id, job.id, 1234, target)
 
-        result = await is_within_cooldown(db_session, wq.id, 24)
-        assert result is False
+        price, actual_date = await get_price_near_date(db_session, ru_id, target, max_delta_days=7)
+
+        assert price == exact.price_cents
+        assert actual_date is not None
+
+    async def test_no_results(self, db_session: AsyncSession):
+        """Returns (None, None) when no scrape results exist."""
+        wq_id, ru_id = await _create_prerequisites(db_session)
+        now = datetime.utcnow()
+        target = now - timedelta(days=30)
+
+        price, actual_date = await get_price_near_date(db_session, ru_id, target, max_delta_days=7)
+
+        assert price is None
+        assert actual_date is None
+
+
+class TestAllTimeExtremes:
+    """Tests for get_all_time_extremes_for_url."""
+
+    async def test_returns_min_and_max(self, db_session: AsyncSession):
+        """Returns (800, 2000) for prices [1000, 1500, 800, 2000]."""
+        wq_id, ru_id = await _create_prerequisites(db_session)
+        job = await create_scrape_job(db_session, wq_id)
+
+        for price in [1000, 1500, 800, 2000]:
+            await _make_scrape_result(db_session, ru_id, job.id, price)
+
+        low, high = await get_all_time_extremes_for_url(db_session, ru_id)
+
+        assert low == 800
+        assert high == 2000
+
+    async def test_no_results(self, db_session: AsyncSession):
+        """Returns (None, None) when no scrape results exist."""
+        wq_id, ru_id = await _create_prerequisites(db_session)
+
+        low, high = await get_all_time_extremes_for_url(db_session, ru_id)
+
+        assert low is None
+        assert high is None
+
+    async def test_single_result(self, db_session: AsyncSession):
+        """Returns (1500, 1500) for a single result."""
+        wq_id, ru_id = await _create_prerequisites(db_session)
+        job = await create_scrape_job(db_session, wq_id)
+
+        await _make_scrape_result(db_session, ru_id, job.id, 1500)
+
+        low, high = await get_all_time_extremes_for_url(db_session, ru_id)
+
+        assert low == 1500
+        assert high == 1500

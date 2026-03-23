@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.retailer_url import RetailerUrl
 from app.models.scrape_job import ScrapeJob
 from app.models.scrape_result import ScrapeResult
 
@@ -77,22 +76,6 @@ async def get_latest_scrape_result(
     return result.scalar_one_or_none()
 
 
-async def get_last_scrape_job(
-    session: AsyncSession,
-    watch_query_id: int,
-) -> ScrapeJob | None:
-    """Get the most recent completed scrape job for a watch query."""
-    stmt = (
-        select(ScrapeJob)
-        .where(ScrapeJob.watch_query_id == watch_query_id)
-        .where(ScrapeJob.status != "running")
-        .order_by(ScrapeJob.id.desc())
-        .limit(1)
-    )
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
 async def get_last_price_change_result(
     session: AsyncSession,
     retailer_url_id: int,
@@ -122,19 +105,27 @@ async def get_rolling_avg_price(
 ) -> tuple[int | None, int]:
     """Return (avg_price_cents, count) for results within the rolling window."""
     cutoff = datetime.utcnow() - timedelta(days=window_days)
-    stmt = select(func.avg(ScrapeResult.price_cents), func.count(ScrapeResult.id)).where(
-        ScrapeResult.retailer_url_id == retailer_url_id, ScrapeResult.created_at >= cutoff
+    stmt = select(
+        func.avg(ScrapeResult.price_cents),
+        func.count(ScrapeResult.id),
+    ).where(
+        ScrapeResult.retailer_url_id == retailer_url_id,
+        ScrapeResult.created_at >= cutoff,
     )
     result = await session.execute(stmt)
     row = result.one()
-    avg_price = int(row[0]) if row[0] is not None else None
-    return avg_price, row[1]
+    avg_raw, count = row[0], row[1]
+    if count == 0:
+        return None, 0
+    return int(round(avg_raw)), count
 
 
 async def get_all_time_min_price(
     session: AsyncSession, watch_query_id: int
 ) -> int | None:
     """Return the minimum price_cents across all retailer URLs for a watch query."""
+    from app.models.retailer_url import RetailerUrl  # avoid circular import
+
     stmt = (
         select(func.min(ScrapeResult.price_cents))
         .join(RetailerUrl, ScrapeResult.retailer_url_id == RetailerUrl.id)
@@ -142,3 +133,47 @@ async def get_all_time_min_price(
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def get_price_near_date(
+    session: AsyncSession,
+    retailer_url_id: int,
+    target_date: datetime,
+    max_delta_days: int = 7,
+) -> tuple[int | None, datetime | None]:
+    """Return (price_cents, actual_date) for the scrape result nearest to target_date.
+
+    Searches within +/- max_delta_days of target_date.
+    Returns (None, None) if no result found within the window.
+    """
+    window_start = target_date - timedelta(days=max_delta_days)
+    window_end = target_date + timedelta(days=max_delta_days)
+    stmt = (
+        select(ScrapeResult.price_cents, ScrapeResult.created_at)
+        .where(
+            ScrapeResult.retailer_url_id == retailer_url_id,
+            ScrapeResult.created_at >= window_start,
+            ScrapeResult.created_at <= window_end,
+        )
+        .order_by(func.abs(func.julianday(ScrapeResult.created_at) - func.julianday(target_date)))
+        .limit(1)
+    )
+    result = await session.execute(stmt)
+    row = result.one_or_none()
+    if row is None:
+        return None, None
+    return row[0], row[1]
+
+
+async def get_all_time_extremes_for_url(
+    session: AsyncSession,
+    retailer_url_id: int,
+) -> tuple[int | None, int | None]:
+    """Return (all_time_low_cents, all_time_high_cents) for a single retailer URL."""
+    stmt = select(
+        func.min(ScrapeResult.price_cents),
+        func.max(ScrapeResult.price_cents),
+    ).where(ScrapeResult.retailer_url_id == retailer_url_id)
+    result = await session.execute(stmt)
+    row = result.one()
+    return row[0], row[1]
