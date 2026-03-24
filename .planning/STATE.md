@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Scraping & Data Quality
-status: Ready to plan
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-03-23T15:28:27.239Z"
+status: Ready to execute
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-23T19:59:57.642Z"
 progress:
   total_phases: 11
   completed_phases: 8
-  total_plans: 24
+  total_plans: 26
   completed_plans: 24
 ---
 
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** The full loop must work -- a scheduled scrape runs automatically, finds a price at or below the configured threshold, and triggers a visible in-app alert without manual intervention.
-**Current focus:** Phase 08 — scrape-health-dashboard
+**Current focus:** Phase 09 — wayback-price-comparisons
 
 ## Current Position
 
-Phase: 9
-Plan: Not started
+Phase: 09 (wayback-price-comparisons) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: Not started
 | Phase 08 P01 | 5min | 2 tasks | 11 files |
 | Phase 08 P02 | 3min | 2 tasks | 10 files |
 | Phase 08 P03 | 3 | 1 tasks | 5 files |
+| Phase 09 P01 | 4min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,9 @@ Recent decisions affecting current work:
 - [Phase 08]: useHealthUrls/useHealthByQuery use select transform to unwrap urls array from HealthListResponse
 - [Phase 08-03]: Threaded healthData through QueryCardGrid to preserve existing grid abstraction
 - [Phase 08-03]: useMemo for healthByQuery map indexed by watch_query_id for O(1) per-card lookup
+- [Phase 09]: get_rolling_avg_price added alongside new wayback functions (was referenced as existing but absent from worktree branch)
+- [Phase 09]: SQLite julianday used for nearest-date proximity ordering in get_price_near_date
+- [Phase 09]: All 10 wayback fields optional/None by default for backward-compatible RetailerUrlWithLatest response
 
 ### Pending Todos
 
@@ -85,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23T15:22:35.058Z
-Stopped at: Completed 08-03-PLAN.md
+Last session: 2026-03-23T19:59:57.638Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None

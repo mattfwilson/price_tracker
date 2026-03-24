@@ -14,6 +14,18 @@ export function Header() {
           </span>
           <nav className="flex items-center gap-4 ml-8">
             <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                cn(
+                  "text-sm font-medium transition-colors hover:text-foreground",
+                  isActive ? "text-foreground" : "text-muted-foreground"
+                )
+              }
+            >
+              Home
+            </NavLink>
+            <NavLink
               to="/health"
               className={({ isActive }) =>
                 cn(

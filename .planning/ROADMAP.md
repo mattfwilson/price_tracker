@@ -179,7 +179,7 @@ Plans:
   2. Watch query detail view shows 30-day and 90-day rolling average prices with sample counts displayed; averages are suppressed (not shown) when fewer than 3 data points exist in the window
   3. Each listing shows a good deal / bad deal indicator based on whether the current price is below the 90-day rolling average
   4. The all-time high price is displayed alongside the existing all-time low for each listing
-**Plans:** 2 plans
+**Plans:** 0/2 plans executed
 
 Plans:
 - [ ] 09-01-PLAN.md — Backend repo functions (nearest-date price lookup, per-URL all-time extremes), schema extension, detail endpoint wiring
@@ -231,6 +231,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 6. Price History Visualization + Polish | v1.0 | 2/2 | Complete | - |
 | 7. Advanced Alert Enhancements | v1.0 | 3/3 | Complete | 2026-03-22 |
 | 8. Scrape Health Dashboard | v1.1 | 3/3 | Complete   | 2026-03-23 |
-| 9. Wayback Price Comparisons | v1.1 | 0/2 | Not started | - |
+| 9. Wayback Price Comparisons | v1.1 | 0/2 | Planned    |  |
 | 10. Multi-Product Fuzzy Matching | v1.1 | 0/3 | Not started | - |
 | 11. Polish & P2 Features | v1.1 | 0/2 | Not started | - |
