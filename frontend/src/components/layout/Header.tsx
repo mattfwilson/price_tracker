@@ -12,14 +12,16 @@ export function Header() {
             <span className="text-primary">Price</span>
             <span className="text-foreground/90"> Scraper</span>
           </span>
-          <nav className="flex items-center gap-4 ml-8">
+          <nav className="flex items-center gap-1 ml-8">
             <NavLink
               to="/"
               end
               className={({ isActive }) =>
                 cn(
-                  "text-sm font-medium transition-colors hover:text-foreground",
-                  isActive ? "text-foreground" : "text-muted-foreground"
+                  "text-sm font-medium px-3 py-1.5 rounded-md transition-colors",
+                  isActive
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                 )
               }
             >
@@ -29,8 +31,10 @@ export function Header() {
               to="/health"
               className={({ isActive }) =>
                 cn(
-                  "text-sm font-medium transition-colors hover:text-foreground",
-                  isActive ? "text-foreground" : "text-muted-foreground"
+                  "text-sm font-medium px-3 py-1.5 rounded-md transition-colors",
+                  isActive
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                 )
               }
             >
