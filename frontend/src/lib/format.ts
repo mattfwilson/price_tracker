@@ -50,3 +50,25 @@ export function formatChartDate(isoString: string): string {
 
 /** Short date for wayback stats: "Mar 12" */
 export const formatShortDate = formatChartDate;
+
+export function formatScheduleLabel(schedule: string): string {
+  switch (schedule) {
+    case "daily": return "Daily";
+    case "weekly": return "Weekly";
+    case "every_1h": return "Every 1h";
+    case "every_3h": return "Every 3h";
+    case "every_6h": return "Every 6h";
+    case "every_12h": return "Every 12h";
+    default: return schedule;
+  }
+}
+
+export function formatTimeUntil(isoString: string): string {
+  const diff = new Date(isoString).getTime() - Date.now();
+  if (diff <= 0) return "soon";
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `in ${hours}h`;
+  return `in ${Math.floor(hours / 24)}d`;
+}
