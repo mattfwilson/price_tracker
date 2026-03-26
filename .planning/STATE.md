@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Scraping & Data Quality
-status: Executing Phase 09
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-03-25T23:11:21.974Z"
+status: Ready to execute
+stopped_at: "Completed 09-02-PLAN.md (checkpoint: awaiting human visual verification)"
+last_updated: "2026-03-26T02:44:15.972Z"
 progress:
   total_phases: 11
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 26
-  completed_plans: 25
+  completed_plans: 26
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 ## Current Position
 
 Phase: 09 (wayback-price-comparisons) — EXECUTING
-Plan: 1 of 2
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Plan: 1 of 2
 | Phase 08 P02 | 3min | 2 tasks | 10 files |
 | Phase 08 P03 | 3 | 1 tasks | 5 files |
 | Phase 09 P01 | 4min | 2 tasks | 4 files |
+| Phase 09 P02 | 5min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 09]: get_rolling_avg_price added alongside new wayback functions (was referenced as existing but absent from worktree branch)
 - [Phase 09]: SQLite julianday used for nearest-date proximity ordering in get_price_near_date
 - [Phase 09]: All 10 wayback fields optional/None by default for backward-compatible RetailerUrlWithLatest response
+- [Phase 09]: formatShortDate added as alias for formatChartDate to avoid duplicating identical month/day formatting logic
+- [Phase 09]: WaybackStats and DealBadge defined inline in ListingRow.tsx for colocation with their only consumer
 
 ### Pending Todos
 
@@ -89,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23T19:59:57.638Z
-Stopped at: Completed 09-01-PLAN.md
+Last session: 2026-03-26T02:44:15.968Z
+Stopped at: Completed 09-02-PLAN.md (checkpoint: awaiting human visual verification)
 Resume file: None

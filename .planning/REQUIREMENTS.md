@@ -71,7 +71,7 @@
 
 - [x] **WAYBACK-01**: Watch query detail view shows price 30 days ago and 90 days ago for each listing, with the actual comparison date displayed alongside the label (not just the period label)
 - [x] **WAYBACK-02**: Watch query detail view shows 30-day and 90-day rolling average prices with sample counts; averages are suppressed when fewer than 3 data points exist in the window
-- [ ] **WAYBACK-03**: Each listing shows a good deal / bad deal indicator based on whether the current price is below the 90-day rolling average
+- [x] **WAYBACK-03**: Each listing shows a good deal / bad deal indicator based on whether the current price is below the 90-day rolling average
 - [x] **WAYBACK-04**: Historical all-time high price is displayed alongside the existing all-time low
 
 ### Fuzzy Matching
@@ -159,7 +159,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HEALTH-04 | Phase 8 | Complete |
 | WAYBACK-01 | Phase 9 | Complete |
 | WAYBACK-02 | Phase 9 | Complete |
-| WAYBACK-03 | Phase 9 | Pending |
+| WAYBACK-03 | Phase 9 | Complete |
 | WAYBACK-04 | Phase 9 | Complete |
 | MATCH-01 | Phase 10 | Pending |
 | MATCH-02 | Phase 10 | Pending |
