@@ -25,8 +25,9 @@ async def get_browser_manager() -> BrowserManager:
     """Return a lazily initialized BrowserManager singleton."""
     global _browser_manager
     if _browser_manager is None:
-        _browser_manager = BrowserManager()
-        await _browser_manager.start()
+        manager = BrowserManager()
+        await manager.start()  # Only assign after successful start; failed start leaves _browser_manager=None so next call retries
+        _browser_manager = manager
     return _browser_manager
 
 

@@ -328,6 +328,8 @@ class BrowserManager:
 
     async def _launch_context(self) -> None:
         """Launch a persistent browser context with stealth settings."""
+        if self._playwright is None:
+            self._playwright = await async_playwright().start()
         _PROFILE_DIR.mkdir(parents=True, exist_ok=True)
         browser_kwargs = _find_browser_kwargs()
         prev_app = _get_frontmost_app()
