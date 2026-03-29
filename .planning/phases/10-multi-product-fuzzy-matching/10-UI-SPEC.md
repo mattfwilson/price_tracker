@@ -1,7 +1,8 @@
 ---
 phase: 10
 slug: multi-product-fuzzy-matching
-status: draft
+status: approved
+reviewed_at: 2026-03-28T00:00:00Z
 shadcn_initialized: true
 preset: default (zinc base, css variables)
 created: 2026-03-28
