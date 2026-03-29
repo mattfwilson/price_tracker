@@ -48,11 +48,11 @@ Exceptions: none
 | Role | Size | Weight | Line Height | Font Family |
 |------|------|--------|-------------|-------------|
 | Body | 14px (text-sm) | 400 (normal) | 1.5 | DM Sans |
-| Label | 12px (text-xs) | 600 (semibold) | 1.5 | DM Sans |
+| Label | 12px (text-xs) | 400 (normal) | 1.5 | DM Sans |
 | Heading | 24px (text-2xl) | 700 (bold) | 1.2 | Outfit |
 | Card Title | 14px (text-sm) | 700 (bold) | 1.2 | Outfit |
 
-Source: Existing project patterns. HealthPage uses `font-heading text-2xl font-bold` for page title. Card headers use `font-heading text-sm font-bold` (per BellDropdown pattern).
+Source: Existing project patterns. HealthPage uses `font-heading text-2xl font-bold` for page title. Card headers use `font-heading text-sm font-bold` (per BellDropdown pattern). Label uses 12px size differentiation at normal weight (no semibold needed at that size).
 
 ---
 
@@ -129,7 +129,7 @@ Card (border bg-card rounded-lg shadow-sm)
       MatchMemberColumn per member:
         Retailer domain      text-xs text-muted-foreground uppercase tracking-wide
         Product name          text-sm font-medium truncate (max 2 lines via line-clamp-2)
-        Price                 font-heading text-lg font-bold
+        Price                 font-heading text-base font-bold
         Watch query name      Badge variant="secondary" text-xs
   CardFooter (p-4 flex justify-end gap-2)
     Button variant="default" size="sm"   "Confirm"
@@ -148,7 +148,7 @@ Card (border bg-card rounded-lg shadow-sm)
       MatchMemberColumn per member:
         Retailer domain      text-xs text-muted-foreground uppercase tracking-wide
         Product name          text-sm font-medium truncate (line-clamp-2)
-        Price                 font-heading text-lg font-bold
+        Price                 font-heading text-base font-bold
         [Lowest] badge        (only on lowest-price member, emerald pattern from ListingRow)
         Last scraped          text-xs text-muted-foreground  (formatRelativeTime)
         "View history" link   text-sm text-primary hover:underline cursor-pointer
@@ -164,7 +164,7 @@ Add between "Health" NavLink and the right-side controls:
 <NavLink to="/matches" className={...same pattern as Health...}>
   Matches
   {pendingCount > 0 && (
-    <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold px-1">
+    <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold px-1">
       {pendingCount}
     </span>
   )}
